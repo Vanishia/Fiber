@@ -45,6 +45,7 @@ firebase*.json
 *.apk
 *.aab
 *.ap_
+*.idsig
 
 # Logs / personal docs
 LOGS/
