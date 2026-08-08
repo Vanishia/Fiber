@@ -1,5 +1,10 @@
 package com.bird.fiber.ui.screens.search
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -56,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +74,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
+import com.bird.fiber.ui.screens.filelist.components.FileListSkeleton
 import com.bird.fiber.utils.FileUtils
 import timber.log.Timber
 
@@ -86,7 +93,6 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     viewModel: FileListViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
     val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
@@ -105,10 +111,6 @@ fun SearchScreen(
     LaunchedEffect(Unit) {
         viewModel.updateSearchScope(FileListViewModel.SearchScope.ALL_LIBRARIES)
         viewModel.updateSearchSort(FileListViewModel.SearchSort.RELEVANCE)
-    }
-
-    LaunchedEffect(uiState.searchQuery) {
-        lazyPagingItems.refresh()
     }
 
     DisposableEffect(Unit) {
@@ -458,20 +460,14 @@ private fun SearchResultsContent(
     modifier: Modifier = Modifier
 ) {
     val refreshState = lazyPagingItems.loadState.refresh
+    val hasItems = lazyPagingItems.itemCount > 0
 
-    when (refreshState) {
-        is LoadState.Loading -> {
-            Box(
-                modifier = modifier
-                    .fillMaxSize()
-                    .padding(top = topPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+    when {
+        refreshState is LoadState.Loading && !hasItems -> {
+            SearchResultsSkeleton(topPadding = topPadding, modifier = modifier.fillMaxSize())
         }
 
-        is LoadState.Error -> {
+        refreshState is LoadState.Error && !hasItems -> {
             Box(
                 modifier = modifier
                     .fillMaxSize()
@@ -490,8 +486,7 @@ private fun SearchResultsContent(
             }
         }
 
-        else -> {
-            if (lazyPagingItems.itemCount == 0) {
+        !hasItems -> {
                 Box(
                     modifier = modifier
                         .fillMaxSize()
@@ -507,9 +502,11 @@ private fun SearchResultsContent(
                         onActionClick = { lazyPagingItems.refresh() }
                     )
                 }
-            } else {
+        }
+        else -> {
+            Box(modifier = modifier.fillMaxSize()) {
                 LazyColumn(
-                    modifier = modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
@@ -548,9 +545,41 @@ private fun SearchResultsContent(
                         }
                     }
                 }
+
+                if (refreshState is LoadState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = topPadding + 8.dp, end = 20.dp)
+                            .size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SearchResultsSkeleton(
+    topPadding: Dp,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "search-skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.58f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 720),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "search-skeleton-alpha"
+    )
+
+    FileListSkeleton(
+        topPadding = topPadding,
+        modifier = modifier.graphicsLayer { this.alpha = alpha }
+    )
 }
 
 @Composable
