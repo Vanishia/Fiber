@@ -1,11 +1,11 @@
 package com.bird.fiber.ui.navigation
 
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -40,7 +40,15 @@ fun FiberNavGraph(
         startDestination = FiberRoute.FILES,
         modifier = modifier.drawBehind { drawRect(backgroundColor) }
     ) {
-        composable(route = FiberRoute.FILES) {
+        composable(
+            route = FiberRoute.FILES,
+            exitTransition = {
+                if (targetState.destination.route == FiberRoute.SEARCH) ExitTransition.None else null
+            },
+            popEnterTransition = {
+                if (initialState.destination.route == FiberRoute.SEARCH) EnterTransition.None else null
+            }
+        ) {
             MainScreenContainer(
                 visible = true,
                 onFileClick = navigateToEditor,
@@ -87,27 +95,15 @@ fun FiberNavGraph(
             route = FiberRoute.SEARCH,
             enterTransition = {
                 slideInHorizontally(
-                    initialOffsetX = { it / 10 },
-                    animationSpec = tween(220, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(120, delayMillis = 30))
-            },
-            exitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { -it / 12 },
-                    animationSpec = tween(200, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(100))
-            },
-            popEnterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { -it / 12 },
-                    animationSpec = tween(200, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(120))
+                    initialOffsetX = { it / 16 },
+                    animationSpec = tween(180, easing = FastOutSlowInEasing)
+                )
             },
             popExitTransition = {
                 slideOutHorizontally(
-                    targetOffsetX = { it / 10 },
-                    animationSpec = tween(220, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(100))
+                    targetOffsetX = { it / 16 },
+                    animationSpec = tween(160, easing = FastOutSlowInEasing)
+                )
             }
         ) {
             SearchScreen(
