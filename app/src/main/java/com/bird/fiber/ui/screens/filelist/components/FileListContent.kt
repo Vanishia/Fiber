@@ -89,6 +89,7 @@ fun FileListContent(
     onCreateClick: () -> Unit = {},
     currentLibraryName: String? = null,
     onListScroll: () -> Unit = {},
+    topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     var showLongPressMenu by remember { mutableStateOf(false) }
@@ -169,7 +170,7 @@ fun FileListContent(
             onCreateClick = onCreateClick,
             currentLibraryName = currentLibraryName,
             statusBarTopPadding = statusBarTopPadding,
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = topBarModifier.align(Alignment.TopCenter)
         )
     }
 

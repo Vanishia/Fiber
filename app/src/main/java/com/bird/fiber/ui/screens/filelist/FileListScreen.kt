@@ -59,6 +59,7 @@ fun FileListScreen(
     onSearchClick: () -> Unit = {},
     currentLibraryName: String? = null,
     onListScroll: () -> Unit = {},
+    topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     viewModel: FileListViewModel = hiltViewModel()
 ) {
@@ -185,6 +186,7 @@ fun FileListScreen(
                     onCreateClick = { showCreateFileDialog = true },
                     currentLibraryName = currentLibraryName,
                     onListScroll = onListScroll,
+                    topBarModifier = topBarModifier,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

@@ -82,6 +82,7 @@ import timber.log.Timber
 fun SearchScreen(
     onBackClick: () -> Unit,
     onFileClick: (String) -> Unit,
+    headerModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     viewModel: FileListViewModel = hiltViewModel()
 ) {
@@ -150,7 +151,7 @@ fun SearchScreen(
                 onSearchQueryChange = { searchQuery = it },
                 onClearClick = { searchQuery = "" },
                 onBackClick = onBackClick,
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = headerModifier.align(Alignment.TopCenter)
             )
         }
     }

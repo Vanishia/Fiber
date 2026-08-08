@@ -1,11 +1,7 @@
 package com.bird.fiber.ui.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,6 +19,7 @@ import com.bird.fiber.ui.screens.settings.SettingsScreen
 import com.bird.fiber.utils.UriHelper
 import timber.log.Timber
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun FiberNavGraph(
     navController: NavHostController,
@@ -35,27 +32,24 @@ fun FiberNavGraph(
         navController.navigate(FiberRoute.editor(fileUri, editMode))
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = FiberRoute.FILES,
-        modifier = modifier.drawBehind { drawRect(backgroundColor) }
-    ) {
-        composable(
-            route = FiberRoute.FILES,
-            exitTransition = {
-                if (targetState.destination.route == FiberRoute.SEARCH) ExitTransition.None else null
-            },
-            popEnterTransition = {
-                if (initialState.destination.route == FiberRoute.SEARCH) EnterTransition.None else null
-            }
+    SharedTransitionLayout {
+        NavHost(
+            navController = navController,
+            startDestination = FiberRoute.FILES,
+            modifier = modifier.drawBehind { drawRect(backgroundColor) }
         ) {
+        composable(route = FiberRoute.FILES) {
             MainScreenContainer(
                 visible = true,
                 onFileClick = navigateToEditor,
                 onSelectFolder = onSelectFolder,
                 onAddLibrary = onAddLibrary,
                 onSearchClick = { navController.navigate(FiberRoute.SEARCH) },
-                onSettingsClick = { navController.navigate(FiberRoute.SETTINGS) }
+                onSettingsClick = { navController.navigate(FiberRoute.SETTINGS) },
+                topBarModifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState("main-search-top-bar"),
+                    animatedVisibilityScope = this
+                )
             )
         }
 
@@ -91,24 +85,14 @@ fun FiberNavGraph(
             )
         }
 
-        composable(
-            route = FiberRoute.SEARCH,
-            enterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { it / 16 },
-                    animationSpec = tween(180, easing = FastOutSlowInEasing)
-                )
-            },
-            popExitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { it / 16 },
-                    animationSpec = tween(160, easing = FastOutSlowInEasing)
-                )
-            }
-        ) {
+        composable(route = FiberRoute.SEARCH) {
             SearchScreen(
                 onBackClick = { navController.popBackStack() },
-                onFileClick = { fileUri -> navigateToEditor(fileUri, false) }
+                onFileClick = { fileUri -> navigateToEditor(fileUri, false) },
+                headerModifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState("main-search-top-bar"),
+                    animatedVisibilityScope = this
+                )
             )
         }
 
@@ -116,6 +100,7 @@ fun FiberNavGraph(
             SettingsScreen(
                 onBackClick = { navController.popBackStack() }
             )
+        }
         }
     }
 }

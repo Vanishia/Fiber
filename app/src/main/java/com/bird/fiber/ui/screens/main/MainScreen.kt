@@ -43,6 +43,7 @@ fun MainScreenContainer(
     onAddLibrary: () -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     viewModel: MainScreenViewModel = hiltViewModel(),
     quickNoteViewModel: QuickNoteViewModel = hiltViewModel()
@@ -67,6 +68,7 @@ fun MainScreenContainer(
         onAddLibrary = onAddLibrary,
         onSearchClick = onSearchClick,
         onSettingsClick = onSettingsClick,
+        topBarModifier = topBarModifier,
         onLibrarySelected = { libraryId ->
             viewModel.onLibrarySelected(libraryId)
             scope.launch { drawerState.close() }
@@ -95,6 +97,7 @@ private fun MainScreenRoute(
     onAddLibrary: () -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    topBarModifier: Modifier,
     onLibrarySelected: (String) -> Unit,
     onOpenDrawer: () -> Unit,
     onCopyContent: (String) -> Unit,
@@ -129,6 +132,7 @@ private fun MainScreenRoute(
             onFileClick = onFileClick,
             onSelectFolder = onSelectFolder,
             onSearchClick = onSearchClick,
+            topBarModifier = topBarModifier,
             onOpenDrawer = onOpenDrawer,
             onCopyContent = onCopyContent,
             onListScroll = onListScroll,
@@ -146,6 +150,7 @@ private fun MainScreenLayout(
     onFileClick: (String, Boolean) -> Unit,
     onSelectFolder: () -> Unit,
     onSearchClick: () -> Unit,
+    topBarModifier: Modifier,
     onOpenDrawer: () -> Unit,
     onCopyContent: (String) -> Unit,
     onListScroll: () -> Unit,
@@ -173,6 +178,7 @@ private fun MainScreenLayout(
                 onCopyContent = onCopyContent,
                 onMenuClick = onOpenDrawer,
                 onSearchClick = onSearchClick,
+                topBarModifier = topBarModifier,
                 currentLibraryName = currentLibraryName,
                 onListScroll = onListScroll,
                 modifier = Modifier.weight(1f)
