@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import com.bird.fiber.utils.MarkdownUtils
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -69,7 +70,8 @@ class FileIndexer internal constructor(
                     )
                     filesToUpsert += entry.file.toEntity(
                         contentPreview = previewReader.readFromContent(content),
-                        contentText = content
+                        contentText = content,
+                        hasImage = MarkdownUtils.containsImage(content)
                     )
                     onProgress?.invoke(index + 1, plan.entriesToUpsert.size)
                 }
@@ -131,7 +133,8 @@ class FileIndexer internal constructor(
                 writer.insert(
                     scannedFile = scannedFile,
                     contentPreview = previewReader.readFromContent(content),
-                    contentText = content
+                    contentText = content,
+                    hasImage = MarkdownUtils.containsImage(content)
                 )
                 Timber.d("FileIndexer: inserted file=%s", scannedFile.name)
             } catch (e: Exception) {
@@ -167,6 +170,7 @@ class FileIndexer internal constructor(
                     existingEntity.copy(
                         contentPreview = previewReader.readFromContent(content),
                         contentText = content,
+                        hasImage = MarkdownUtils.containsImage(content),
                         lastModified = System.currentTimeMillis(),
                         size = content.toByteArray().size.toLong()
                     )

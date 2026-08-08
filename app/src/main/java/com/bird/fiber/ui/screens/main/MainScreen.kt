@@ -81,6 +81,8 @@ fun MainScreenContainer(
             quickNoteViewModel.onContentChange(newValue)
         },
         onQuickNoteDismissError = { quickNoteViewModel.clearError() },
+        onQuickNoteImageSelected = quickNoteViewModel::addImage,
+        onQuickNoteRemoveAttachment = quickNoteViewModel::removeAttachment,
         onQuickNoteSave = { quickNoteViewModel.saveNote() }
     )
 }
@@ -104,6 +106,8 @@ private fun MainScreenRoute(
     onListScroll: () -> Unit,
     onQuickNoteContentChange: (String) -> Unit,
     onQuickNoteDismissError: () -> Unit,
+    onQuickNoteImageSelected: (String) -> Unit,
+    onQuickNoteRemoveAttachment: (String) -> Unit,
     onQuickNoteSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -138,6 +142,8 @@ private fun MainScreenRoute(
             onListScroll = onListScroll,
             onQuickNoteContentChange = onQuickNoteContentChange,
             onQuickNoteDismissError = onQuickNoteDismissError,
+            onQuickNoteImageSelected = onQuickNoteImageSelected,
+            onQuickNoteRemoveAttachment = onQuickNoteRemoveAttachment,
             onQuickNoteSave = onQuickNoteSave
         )
     }
@@ -156,6 +162,8 @@ private fun MainScreenLayout(
     onListScroll: () -> Unit,
     onQuickNoteContentChange: (String) -> Unit,
     onQuickNoteDismissError: () -> Unit,
+    onQuickNoteImageSelected: (String) -> Unit,
+    onQuickNoteRemoveAttachment: (String) -> Unit,
     onQuickNoteSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -186,9 +194,13 @@ private fun MainScreenLayout(
 
             QuickNoteBar(
                 content = quickNoteState.content,
+                attachments = quickNoteState.attachments,
                 isSaving = quickNoteState.isSaving,
+                isAddingImage = quickNoteState.isAddingImage,
                 error = quickNoteState.error,
                 onContentChange = onQuickNoteContentChange,
+                onImageSelected = onQuickNoteImageSelected,
+                onRemoveAttachment = onQuickNoteRemoveAttachment,
                 onDismissError = onQuickNoteDismissError,
                 onSaveClick = onQuickNoteSave
             )

@@ -20,7 +20,8 @@ internal fun EditorContentHost(
     uiState: EditorUiState,
     renderedMarkdown: Spanned?,
     isRendering: Boolean,
-    onContentChange: (String) -> Unit,
+    onContentChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
+    onImageSelected: (String) -> Unit,
     topContentInset: Dp,
     bottomContentInset: Dp,
     modifier: Modifier = Modifier
@@ -69,8 +70,10 @@ internal fun EditorContentHost(
 
         else -> {
             EditorEditPane(
-                content = uiState.content,
+                value = uiState.textValue,
                 onContentChange = onContentChange,
+                onImageSelected = onImageSelected,
+                isAddingImage = uiState.isAddingImage,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
                 modifier = contentModifier

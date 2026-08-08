@@ -20,6 +20,7 @@ data class MarkdownFileMeta(
     val lastModified: Long,
     val size: Long,
     val preview: String = "",
+    val hasImage: Boolean = false,
     val libraryId: String? = null,
     val libraryName: String = ""
 )

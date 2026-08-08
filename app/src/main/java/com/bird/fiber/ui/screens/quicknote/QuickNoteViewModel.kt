@@ -8,6 +8,7 @@ import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.domain.usecase.CreateMarkdownFileUseCase
+import com.bird.fiber.data.repository.AttachmentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +36,8 @@ import javax.inject.Inject
 @HiltViewModel
 class QuickNoteViewModel @Inject constructor(
     private val createMarkdownFile: CreateMarkdownFileUseCase,
-    private val eventBus: EventBus
+    private val eventBus: EventBus,
+    private val attachmentRepository: AttachmentRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(QuickNoteUiState())
@@ -60,6 +62,35 @@ class QuickNoteViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
+    fun addImage(sourceUri: String) {
+        if (_uiState.value.isAddingImage) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
+            val targetLibrary = _uiState.value.attachments.firstOrNull()?.libraryFolderUri
+            when (val result = attachmentRepository.copyImage(sourceUri, targetLibrary)) {
+                is FileResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        attachments = _uiState.value.attachments + result.data,
+                        isAddingImage = false
+                    )
+                }
+                is FileResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isAddingImage = false,
+                        error = result.error.toUserMessage()
+                    )
+                }
+                is FileResult.Loading -> Unit
+            }
+        }
+    }
+
+    fun removeAttachment(relativePath: String) {
+        _uiState.value = _uiState.value.copy(
+            attachments = _uiState.value.attachments.filterNot { it.relativePath == relativePath }
+        )
+    }
+
     /**
      * 保存笔记
      *
@@ -70,7 +101,9 @@ class QuickNoteViewModel @Inject constructor(
      * - 通过 Channel 通知 UI 层关闭页面
      */
     fun saveNote() {
-        val content = _uiState.value.content
+        if (_uiState.value.isSaving || _uiState.value.isAddingImage) return
+        val content = buildNoteContent(_uiState.value)
+        if (content.isBlank()) return
         Timber.d("QuickNoteViewModel: saveNote() 被调用，当前 content = '$content'")
 
         viewModelScope.launch {
@@ -78,7 +111,7 @@ class QuickNoteViewModel @Inject constructor(
 
             // 调用 UseCase 创建文件
             when (val result = createMarkdownFile(
-                folderUri = null,  // 使用当前选中的库
+                folderUri = _uiState.value.attachments.firstOrNull()?.libraryFolderUri,
                 content = content
             )) {
                 is FileResult.Success -> {
@@ -89,7 +122,8 @@ class QuickNoteViewModel @Inject constructor(
                     // 清空输入框，保存完成
                     _uiState.value = _uiState.value.copy(
                         isSaving = false,
-                        content = ""
+                        content = "",
+                        attachments = emptyList()
                     )
                     Timber.d("QuickNoteViewModel: content 已清空")
 
@@ -110,6 +144,15 @@ class QuickNoteViewModel @Inject constructor(
                     // 不需要处理（Loading 状态由 isSaving 控制）
                 }
             }
+        }
+    }
+
+    private fun buildNoteContent(state: QuickNoteUiState): String {
+        val references = state.attachments.joinToString("\n") { it.toMarkdown() }
+        return when {
+            state.content.isBlank() -> references
+            references.isBlank() -> state.content
+            else -> state.content.trimEnd() + "\n\n" + references
         }
     }
 }

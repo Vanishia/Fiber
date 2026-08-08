@@ -145,7 +145,15 @@ class MarkdownUtilsTest {
 
         // Assert
         assertFalse("应该移除图片语法", result.contains("!["))
+        assertFalse("不应该残留感叹号", result.contains("!"))
+        assertFalse("不应该保留图片说明", result.contains("图片说明"))
         assertTrue("应该保留正文", result.contains("正文内容"))
+    }
+
+    @Test
+    fun containsImage_detectsStandardMarkdownImage() {
+        assertTrue(MarkdownUtils.containsImage("正文\n![图片](attachments/a.png)"))
+        assertFalse(MarkdownUtils.containsImage("[链接](https://example.com)"))
     }
 
     @Test

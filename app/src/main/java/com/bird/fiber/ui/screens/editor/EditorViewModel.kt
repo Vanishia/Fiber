@@ -2,11 +2,14 @@ package com.bird.fiber.ui.screens.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
+import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -31,24 +34,28 @@ class EditorViewModel : ViewModel {
     private val fileRepository: FileRepository
     private val eventBus: EventBus
     private val renderMarkdownUseCase: RenderMarkdownUseCase
+    private val attachmentRepository: AttachmentRepository
     private val renderDispatcher: CoroutineDispatcher
 
     @Inject
     constructor(
         fileRepository: FileRepository,
         eventBus: EventBus,
-        renderMarkdownUseCase: RenderMarkdownUseCase
-    ) : this(fileRepository, eventBus, renderMarkdownUseCase, Dispatchers.Default)
+        renderMarkdownUseCase: RenderMarkdownUseCase,
+        attachmentRepository: AttachmentRepository
+    ) : this(fileRepository, eventBus, renderMarkdownUseCase, attachmentRepository, Dispatchers.Default)
 
     internal constructor(
         fileRepository: FileRepository,
         eventBus: EventBus,
         renderMarkdownUseCase: RenderMarkdownUseCase,
+        attachmentRepository: AttachmentRepository,
         renderDispatcher: CoroutineDispatcher
     ) : super() {
         this.fileRepository = fileRepository
         this.eventBus = eventBus
         this.renderMarkdownUseCase = renderMarkdownUseCase
+        this.attachmentRepository = attachmentRepository
         this.renderDispatcher = renderDispatcher
     }
 
@@ -91,7 +98,7 @@ class EditorViewModel : ViewModel {
 
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        content = result.data,
+                        textValue = TextFieldValue(result.data, TextRange(result.data.length)),
                         fileName = fileName
                     )
                     // 初始加载直接渲染，不经过 debounce，避免启动时空白延迟
@@ -114,9 +121,42 @@ class EditorViewModel : ViewModel {
      * 更新编辑内容
      */
     fun onContentChange(newContent: String) {
-        _uiState.value = _uiState.value.copy(content = newContent)
+        onTextValueChange(TextFieldValue(newContent, TextRange(newContent.length)))
+    }
+
+    fun onTextValueChange(newValue: TextFieldValue) {
+        _uiState.value = _uiState.value.copy(textValue = newValue)
         // 打字期间的渲染经过 debounce，避免频繁解析大文件
-        renderMarkdown(newContent)
+        renderMarkdown(newValue.text)
+    }
+
+    fun addImage(sourceUri: String) {
+        if (_uiState.value.isAddingImage) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
+            when (val result = attachmentRepository.copyImage(sourceUri)) {
+                is com.bird.fiber.data.model.FileResult.Success -> {
+                    val current = _uiState.value.textValue
+                    val start = current.selection.min.coerceIn(0, current.text.length)
+                    val end = current.selection.max.coerceIn(start, current.text.length)
+                    val markdown = result.data.toMarkdown()
+                    val updatedText = current.text.replaceRange(start, end, markdown)
+                    val caret = start + markdown.length
+                    _uiState.value = _uiState.value.copy(
+                        textValue = TextFieldValue(updatedText, TextRange(caret)),
+                        isAddingImage = false
+                    )
+                    renderMarkdown(updatedText)
+                }
+                is com.bird.fiber.data.model.FileResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isAddingImage = false,
+                        error = result.error.toUserMessage()
+                    )
+                }
+                is com.bird.fiber.data.model.FileResult.Loading -> Unit
+            }
+        }
     }
 
     /**
@@ -183,7 +223,7 @@ class EditorViewModel : ViewModel {
         _renderState.value = _renderState.value.copy(isRendering = true)
         try {
             val rendered = withContext(renderDispatcher) {
-                renderMarkdownUseCase.render(content)
+                renderMarkdownUseCase.render(content, currentFileUri)
             }
             _renderState.value = EditorRenderState(
                 renderedMarkdown = rendered,

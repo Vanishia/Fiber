@@ -20,12 +20,14 @@ class MarkdownIndexWriter(
     suspend fun insert(
         scannedFile: ScannedFile,
         contentPreview: String,
-        contentText: String
+        contentText: String,
+        hasImage: Boolean
     ) {
         markdownFileDao.insert(
             scannedFile.toEntity(
                 contentPreview = contentPreview,
-                contentText = contentText
+                contentText = contentText,
+                hasImage = hasImage
             )
         )
     }

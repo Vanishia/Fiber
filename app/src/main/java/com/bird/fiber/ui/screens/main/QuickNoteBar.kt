@@ -1,20 +1,32 @@
 package com.bird.fiber.ui.screens.main
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -25,6 +37,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,19 +47,42 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.bird.fiber.data.model.Attachment
+import com.bird.fiber.ui.components.AssociationMenu
+import com.bird.fiber.ui.components.findAssociationTrigger
+import com.bird.fiber.ui.components.removeAssociationTrigger
 
 @Composable
 fun QuickNoteBar(
     content: String,
+    attachments: List<Attachment>,
     isSaving: Boolean,
+    isAddingImage: Boolean,
     error: String?,
     onContentChange: (String) -> Unit,
+    onImageSelected: (String) -> Unit,
+    onRemoveAttachment: (String) -> Unit,
     onDismissError: () -> Unit,
     onSaveClick: () -> Unit
 ) {
     var isInputFocused by remember { mutableStateOf(false) }
-    val isContentEmpty = content.isBlank()
+    var value by remember { mutableStateOf(TextFieldValue(content)) }
+    var associationMenuExpanded by remember { mutableStateOf(false) }
+    var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
+    val isContentEmpty = content.isBlank() && attachments.isEmpty()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { onImageSelected(it.toString()) }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(content) {
+        if (content != value.text) {
+            value = TextFieldValue(content, TextRange(content.length))
+        }
+    }
 
     androidx.compose.foundation.layout.Column(
         modifier = Modifier
@@ -65,6 +102,15 @@ fun QuickNoteBar(
             }
         }
 
+        if (attachments.isNotEmpty() || isAddingImage) {
+            AttachmentStrip(
+                attachments = attachments,
+                isAddingImage = isAddingImage,
+                onRemoveAttachment = onRemoveAttachment,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -77,8 +123,13 @@ fun QuickNoteBar(
                 .padding(horizontal = 12.dp)
         ) {
             OutlinedTextField(
-                value = content,
-                onValueChange = onContentChange,
+                value = value,
+                onValueChange = { newValue ->
+                    value = newValue
+                    onContentChange(newValue.text)
+                    associationTriggerIndex = findAssociationTrigger(newValue)
+                    associationMenuExpanded = associationTriggerIndex != null
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { isInputFocused = it.isFocused },
@@ -92,6 +143,20 @@ fun QuickNoteBar(
                 )
             )
 
+            AssociationMenu(
+                expanded = associationMenuExpanded,
+                onDismiss = { associationMenuExpanded = false },
+                onImageClick = {
+                    associationTriggerIndex?.let { index ->
+                        value = removeAssociationTrigger(value, index)
+                        onContentChange(value.text)
+                    }
+                    associationMenuExpanded = false
+                    associationTriggerIndex = null
+                    imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+            )
+
             if (!isContentEmpty || isInputFocused) {
                 FilledIconButton(
                     onClick = onSaveClick,
@@ -99,7 +164,7 @@ fun QuickNoteBar(
                         .align(Alignment.BottomEnd)
                         .padding(end = 8.dp, bottom = 8.dp)
                         .size(32.dp),
-                    enabled = !isContentEmpty && !isSaving,
+                    enabled = !isContentEmpty && !isSaving && !isAddingImage,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -119,6 +184,62 @@ fun QuickNoteBar(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentStrip(
+    attachments: List<Attachment>,
+    isAddingImage: Boolean,
+    onRemoveAttachment: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items(attachments, key = { it.uri }) { attachment ->
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.widthIn(max = 220.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = attachment.displayName,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { onRemoveAttachment(attachment.relativePath) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "移除图片",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+        if (isAddingImage) {
+            item {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             }
         }
     }

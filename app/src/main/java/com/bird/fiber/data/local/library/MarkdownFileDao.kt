@@ -85,7 +85,7 @@ interface MarkdownFileDao {
      * 获取指定库的文件摘要（不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -97,7 +97,7 @@ interface MarkdownFileDao {
      * 搜索文件摘要（文件名 + 正文匹配，不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId
@@ -112,7 +112,7 @@ interface MarkdownFileDao {
     fun searchFilesSummary(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -127,7 +127,7 @@ interface MarkdownFileDao {
     fun searchFilesByRelevance(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -142,7 +142,7 @@ interface MarkdownFileDao {
     fun searchAllFilesByRelevance(query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0

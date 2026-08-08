@@ -3,17 +3,21 @@ package com.bird.fiber.domain.usecase
 import android.content.Context
 import android.text.Spanned
 import com.bird.fiber.utils.MarkdownUtils
+import com.bird.fiber.data.repository.AttachmentRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.image.ImagesPlugin
+import io.noties.markwon.image.coil.CoilImagesPlugin
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class RenderMarkdownUseCase @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val attachmentRepository: AttachmentRepository
 ) {
     private val appContext = context.applicationContext
 
@@ -22,12 +26,33 @@ class RenderMarkdownUseCase @Inject constructor(
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(TablePlugin.create(appContext))
             .usePlugin(TaskListPlugin.create(appContext))
+            .usePlugin(ImagesPlugin.create())
+            .usePlugin(CoilImagesPlugin.create(appContext))
             .build()
     }
 
-    fun render(content: String): Spanned {
-        val processed = MarkdownUtils.preprocessMarkdownForHardBreaks(content)
+    fun render(content: String, markdownFileUri: String? = null): Spanned {
+        val resolved = if (markdownFileUri == null) {
+            content
+        } else {
+            resolveAttachmentReferences(content, markdownFileUri)
+        }
+        val processed = MarkdownUtils.preprocessMarkdownForHardBreaks(resolved)
         val parsed = markwon.parse(processed)
         return markwon.render(parsed)
+    }
+
+    private fun resolveAttachmentReferences(content: String, markdownFileUri: String): String {
+        return IMAGE_PATTERN.replace(content) { match ->
+            val alt = match.groupValues[1]
+            val destination = match.groupValues[2].ifEmpty { match.groupValues[3] }.trim()
+            val resolved = attachmentRepository.resolveUri(markdownFileUri, destination)
+                ?: return@replace match.value
+            "![$alt]($resolved)"
+        }
+    }
+
+    companion object {
+        private val IMAGE_PATTERN = Regex("""!\[([^\]]*)]\((?:<([^>]+)>|([^)]+))\)""")
     }
 }

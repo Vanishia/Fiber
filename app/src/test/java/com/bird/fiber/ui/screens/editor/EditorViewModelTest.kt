@@ -8,6 +8,10 @@ import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
+import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.model.Attachment
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.utils.TestCoroutineRule
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,6 +43,7 @@ class EditorViewModelTest {
     private lateinit var fileRepository: FileRepository
     private lateinit var eventBus: EventBus
     private lateinit var renderMarkdownUseCase: RenderMarkdownUseCase
+    private lateinit var attachmentRepository: AttachmentRepository
     private lateinit var viewModel: EditorViewModel
 
     @Before
@@ -46,11 +51,13 @@ class EditorViewModelTest {
         fileRepository = mockk(relaxed = true)
         eventBus = mockk(relaxed = true)
         renderMarkdownUseCase = mockk(relaxed = true)
-        every { renderMarkdownUseCase.render(any()) } returns mockk<Spanned>(relaxed = true)
+        attachmentRepository = mockk(relaxed = true)
+        every { renderMarkdownUseCase.render(any(), any()) } returns mockk<Spanned>(relaxed = true)
         viewModel = EditorViewModel(
             fileRepository,
             eventBus,
             renderMarkdownUseCase,
+            attachmentRepository,
             coroutineRule.testDispatcher
         )
     }
@@ -126,6 +133,29 @@ class EditorViewModelTest {
 
         // Assert
         assertEquals(newContent, viewModel.uiState.value.content)
+    }
+
+    @Test
+    fun addImage_insertsMarkdownAtCurrentSelection() = runTest {
+        val fileUri = "content://test/file.md"
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("前后")
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(
+            Attachment(
+                displayName = "image.png",
+                relativePath = "attachments/image.png",
+                uri = "content://test/image.png",
+                libraryFolderUri = "content://test/library"
+            )
+        )
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        viewModel.onTextValueChange(TextFieldValue("前后", TextRange(1)))
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+
+        assertEquals("前![图片](attachments/image.png)后", viewModel.uiState.value.content)
+        assertEquals(TextRange(29), viewModel.uiState.value.textValue.selection)
     }
 
     @Test

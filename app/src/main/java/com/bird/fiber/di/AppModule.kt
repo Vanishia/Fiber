@@ -4,11 +4,13 @@ import android.content.ContentResolver
 import android.content.Context
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.data.local.FileRepositoryImpl
+import com.bird.fiber.data.local.AttachmentRepositoryImpl
 import com.bird.fiber.data.local.library.FiberDatabase
 import com.bird.fiber.data.local.library.LibraryDao
 import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.repository.FileRepository
+import com.bird.fiber.data.repository.AttachmentRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -78,6 +80,12 @@ object DatabaseModule {
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class AppModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindAttachmentRepository(
+        attachmentRepositoryImpl: AttachmentRepositoryImpl
+    ): AttachmentRepository
 
     /**
      * 提供FileRepository实现

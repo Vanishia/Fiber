@@ -7,6 +7,8 @@ package com.bird.fiber.utils
  */
 object MarkdownUtils {
 
+    private val markdownImagePattern = Regex("""!\[[^\]]*]\((?:<[^>]+>|[^)]+)\)""")
+
     /**
      * 预处理 Markdown 文本，开启硬换行模式
      *
@@ -43,10 +45,11 @@ object MarkdownUtils {
         // 行内代码：移除反引号但保留内容（例如 `println()` -> println()）
         text = text.replace(Regex("""`([^`]*)`"""), "$1")
 
-        // 移除链接，保留文本
-        text = text.replace(Regex("""\[([^\]]*)\]\([^\)]*\)"""), "$1")
         // 移除图片
-        text = text.replace(Regex("""!\[[^\]]*\]\([^\)]*\)"""), "")
+        text = text.replace(markdownImagePattern, "")
+
+        // 移除链接，保留文本。图片必须先移除，否则会残留前导 !。
+        text = text.replace(Regex("""\[([^\]]*)\]\([^\)]*\)"""), "$1")
 
         // 移除标题标记（按行处理）
         text = text.replace(Regex("""(?m)^#{1,6}\s*"""), "")
@@ -71,4 +74,6 @@ object MarkdownUtils {
             text
         }
     }
+
+    fun containsImage(content: String): Boolean = markdownImagePattern.containsMatchIn(content)
 }

@@ -97,6 +97,12 @@ dependencies {
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:ext-tasklist:4.6.2")
     implementation("io.noties.markwon:inline-parser:4.6.2")
+    implementation("io.noties.markwon:image:4.6.2")
+    implementation("io.noties.markwon:image-coil:4.6.2")
+    implementation("io.coil-kt:coil:0.13.0")
+
+    // SAF attachment directory traversal
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Timber 日志库
     implementation("com.jakewharton.timber:timber:5.0.1")

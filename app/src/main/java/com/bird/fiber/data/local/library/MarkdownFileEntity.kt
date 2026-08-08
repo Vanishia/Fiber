@@ -91,6 +91,9 @@ data class MarkdownFileEntity(
     @ColumnInfo(name = "content_text")
     val contentText: String = "",
 
+    @ColumnInfo(name = "has_image")
+    val hasImage: Boolean = false,
+
     /**
      * 是否已删除（软删除标记）
      *
@@ -112,6 +115,7 @@ fun MarkdownFileEntity.toMarkdownFileMeta(): MarkdownFileMeta {
         lastModified = lastModified,
         size = size,
         preview = contentPreview,
+        hasImage = hasImage,
         libraryId = libraryId
     )
 }
@@ -128,6 +132,7 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "last_modified") val lastModified: Long,
     @ColumnInfo(name = "size") val size: Long,
     @ColumnInfo(name = "content_preview") val contentPreview: String,
+    @ColumnInfo(name = "has_image") val hasImage: Boolean,
     @ColumnInfo(name = "library_id") val libraryId: String,
     @ColumnInfo(name = "library_name") val libraryName: String?
 )
@@ -140,6 +145,7 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         lastModified = lastModified,
         size = size,
         preview = contentPreview,
+        hasImage = hasImage,
         libraryId = libraryId,
         libraryName = libraryName.orEmpty()
     )

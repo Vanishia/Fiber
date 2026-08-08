@@ -7,6 +7,8 @@ import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.domain.usecase.CreateMarkdownFileUseCase
+import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.model.Attachment
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,6 +40,7 @@ class QuickNoteViewModelTest {
 
     private lateinit var createMarkdownFile: CreateMarkdownFileUseCase
     private lateinit var eventBus: EventBus
+    private lateinit var attachmentRepository: AttachmentRepository
     private lateinit var viewModel: QuickNoteViewModel
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -47,7 +50,8 @@ class QuickNoteViewModelTest {
         Dispatchers.setMain(testDispatcher)
         createMarkdownFile = mockk()
         eventBus = mockk(relaxed = true)
-        viewModel = QuickNoteViewModel(createMarkdownFile, eventBus)
+        attachmentRepository = mockk(relaxed = true)
+        viewModel = QuickNoteViewModel(createMarkdownFile, eventBus, attachmentRepository)
     }
 
     @After
@@ -313,5 +317,31 @@ class QuickNoteViewModelTest {
         assertEquals("", state.content)
         assertFalse(state.isSaving)
         assertNull(state.error)
+    }
+
+    @Test
+    fun saveNote_withOnlyImage_createsMarkdownNote() = runTest {
+        val attachment = Attachment(
+            displayName = "image.png",
+            relativePath = "attachments/image.png",
+            uri = "content://test/image.png",
+            libraryFolderUri = "content://test/library"
+        )
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery {
+            createMarkdownFile(folderUri = "content://test/library", content = "![图片](attachments/image.png)", fileName = null)
+        } returns FileResult.Success(
+            MarkdownFileMeta("content://test/note.md", "note", "note.md", 0L, 0L)
+        )
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.saveNote()
+        advanceUntilIdle()
+
+        coVerify {
+            createMarkdownFile(folderUri = "content://test/library", content = "![图片](attachments/image.png)", fileName = null)
+        }
+        assertTrue(viewModel.uiState.value.attachments.isEmpty())
     }
 }

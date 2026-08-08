@@ -94,7 +94,8 @@ fun EditorScreen(
                 uiState = uiState,
                 renderedMarkdown = renderState.renderedMarkdown,
                 isRendering = renderState.isRendering,
-                onContentChange = viewModel::onContentChange,
+                onContentChange = viewModel::onTextValueChange,
+                onImageSelected = viewModel::addImage,
                 topContentInset = overlayTopInset,
                 bottomContentInset = navigationBarBottomPadding,
                 modifier = Modifier.fillMaxSize()
