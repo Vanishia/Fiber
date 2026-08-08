@@ -85,7 +85,8 @@ interface MarkdownFileDao {
      * 获取指定库的文件摘要（不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview
+        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
         ORDER BY last_modified DESC
@@ -96,17 +97,59 @@ interface MarkdownFileDao {
      * 搜索文件摘要（文件名 + 正文匹配，不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview
+        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId
         AND is_deleted = 0
         AND (
             name LIKE '%' || :query || '%'
+            OR path LIKE '%' || :query || '%'
             OR content_text LIKE '%' || :query || '%'
         )
         ORDER BY last_modified DESC
     """)
     fun searchFilesSummary(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
+
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE library_id = :libraryId AND is_deleted = 0
+        AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        ORDER BY CASE
+            WHEN name = :query OR name = :query || '.md' THEN 0
+            WHEN name LIKE :query || '%' THEN 1
+            WHEN path LIKE '%' || :query || '%' THEN 2
+            ELSE 3
+        END, last_modified DESC
+    """)
+    fun searchFilesByRelevance(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
+
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE is_deleted = 0
+        AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        ORDER BY CASE
+            WHEN name = :query OR name = :query || '.md' THEN 0
+            WHEN name LIKE :query || '%' THEN 1
+            WHEN path LIKE '%' || :query || '%' THEN 2
+            ELSE 3
+        END, last_modified DESC
+    """)
+    fun searchAllFilesByRelevance(query: String): PagingSource<Int, MarkdownFileSummary>
+
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE is_deleted = 0
+        AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        ORDER BY last_modified DESC
+    """)
+    fun searchAllFilesByModified(query: String): PagingSource<Int, MarkdownFileSummary>
 
     /**
      * 获取指定库的文件数量

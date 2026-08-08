@@ -19,7 +19,9 @@ data class MarkdownFileMeta(
     val path: String,
     val lastModified: Long,
     val size: Long,
-    val preview: String = ""
+    val preview: String = "",
+    val libraryId: String? = null,
+    val libraryName: String = ""
 )
 
 /**

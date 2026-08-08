@@ -45,6 +45,9 @@ class FileListViewModel @Inject constructor(
     private val previewCache: PreviewCache
 ) : ViewModel() {
 
+    enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
+    enum class SearchSort { RELEVANCE, RECENT_MODIFIED }
+
     private val _uiState = MutableStateFlow(FileListUiState())
     val uiState: StateFlow<FileListUiState> = _uiState.asStateFlow()
 
@@ -57,6 +60,11 @@ class FileListViewModel @Inject constructor(
 
     // UI 输入的搜索词，经过 300ms 防抖后写入 _currentSearchQuery
     private val _searchQueryInput = MutableStateFlow("")
+    private val _searchScope = MutableStateFlow(SearchScope.CURRENT_LIBRARY)
+    private val _searchSort = MutableStateFlow(SearchSort.RELEVANCE)
+
+    val searchScope: StateFlow<SearchScope> = _searchScope.asStateFlow()
+    val searchSort: StateFlow<SearchSort> = _searchSort.asStateFlow()
 
     init {
         observeActiveLibrary()
@@ -67,22 +75,39 @@ class FileListViewModel @Inject constructor(
     val pager: Flow<PagingData<MarkdownFileMeta>> = combine(
         _currentLibraryId,
         _currentSearchQuery,
+        _searchScope,
+        _searchSort,
         _refreshVersion
-    ) { libraryId, searchQuery, refreshVersion ->
-        PagerParams(libraryId, searchQuery, refreshVersion)
+    ) { libraryId, searchQuery, scope, sort, refreshVersion ->
+        PagerParams(libraryId, searchQuery, scope, sort, refreshVersion)
     }
         .distinctUntilChanged()
         .flatMapLatest { params ->
             if (params.libraryId == null) {
                 flowOf(androidx.paging.PagingData.empty())
             } else {
-                createPager(params.libraryId, params.searchQuery)
+                createPager(params.libraryId, params.searchQuery, params.scope, params.sort)
             }
         }
 
     fun updateSearchQuery(query: String) {
         if (_searchQueryInput.value != query) {
             _searchQueryInput.value = query
+        }
+    }
+
+    fun updateSearchScope(scope: SearchScope) { _searchScope.value = scope }
+
+    fun updateSearchSort(sort: SearchSort) { _searchSort.value = sort }
+
+    fun openSearchResult(file: MarkdownFileMeta, onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val libraryId = file.libraryId
+            if (libraryId != null && libraryId != _currentLibraryId.value) {
+                runCatching { libraryRepository.switchLibrary(libraryId) }
+                    .onFailure { Timber.e(it, "Failed to switch library before opening search result") }
+            }
+            onReady(file.uri)
         }
     }
 
@@ -185,8 +210,10 @@ class FileListViewModel @Inject constructor(
     }
 
     private fun createPager(
-        libraryId: String,
-        searchQuery: String
+        libraryId: String?,
+        searchQuery: String,
+        scope: SearchScope,
+        sort: SearchSort
     ): Flow<PagingData<MarkdownFileMeta>> {
         return Pager(
             config = AndroidPagingConfig(
@@ -196,10 +223,16 @@ class FileListViewModel @Inject constructor(
                 initialLoadSize = PagingConfig.INITIAL_LOAD_SIZE
             ),
             pagingSourceFactory = {
-                if (searchQuery.isBlank()) {
+                if (searchQuery.isBlank() && libraryId != null) {
                     markdownFileDao.getFilesByLibrarySummary(libraryId)
+                } else if (scope == SearchScope.ALL_LIBRARIES && searchQuery.isNotBlank()) {
+                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchAllFilesByRelevance(searchQuery)
+                    else markdownFileDao.searchAllFilesByModified(searchQuery)
+                } else if (libraryId != null) {
+                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchFilesByRelevance(libraryId, searchQuery)
+                    else markdownFileDao.searchFilesSummary(libraryId, searchQuery)
                 } else {
-                    markdownFileDao.searchFilesSummary(libraryId, searchQuery)
+                    markdownFileDao.searchAllFilesByModified(searchQuery)
                 }
             }
         ).flow.map { pagingData ->
@@ -296,6 +329,8 @@ class FileListViewModel @Inject constructor(
     private data class PagerParams(
         val libraryId: String?,
         val searchQuery: String,
+        val scope: SearchScope,
+        val sort: SearchSort,
         val refreshVersion: Int
     )
 }

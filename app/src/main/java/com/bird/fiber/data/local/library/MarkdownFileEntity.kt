@@ -111,7 +111,8 @@ fun MarkdownFileEntity.toMarkdownFileMeta(): MarkdownFileMeta {
         path = path,
         lastModified = lastModified,
         size = size,
-        preview = contentPreview
+        preview = contentPreview,
+        libraryId = libraryId
     )
 }
 
@@ -126,7 +127,9 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "path") val path: String,
     @ColumnInfo(name = "last_modified") val lastModified: Long,
     @ColumnInfo(name = "size") val size: Long,
-    @ColumnInfo(name = "content_preview") val contentPreview: String
+    @ColumnInfo(name = "content_preview") val contentPreview: String,
+    @ColumnInfo(name = "library_id") val libraryId: String,
+    @ColumnInfo(name = "library_name") val libraryName: String?
 )
 
 fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
@@ -136,6 +139,8 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         path = path,
         lastModified = lastModified,
         size = size,
-        preview = contentPreview
+        preview = contentPreview,
+        libraryId = libraryId,
+        libraryName = libraryName.orEmpty()
     )
 }

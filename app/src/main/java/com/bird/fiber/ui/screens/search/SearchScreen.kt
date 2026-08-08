@@ -34,6 +34,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
@@ -80,6 +83,8 @@ fun SearchScreen(
     viewModel: FileListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
+    val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     val lazyPagingItems = viewModel.pager.collectAsLazyPagingItems()
@@ -91,6 +96,11 @@ fun SearchScreen(
 
     LaunchedEffect(searchQuery) {
         viewModel.updateSearchQuery(searchQuery)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.updateSearchScope(FileListViewModel.SearchScope.ALL_LIBRARIES)
+        viewModel.updateSearchSort(FileListViewModel.SearchSort.RELEVANCE)
     }
 
     LaunchedEffect(uiState.searchQuery) {
@@ -115,6 +125,10 @@ fun SearchScreen(
             if (searchQuery.isBlank()) {
                 EmptySearchContent(
                     onQuickSearchClick = { query -> searchQuery = query },
+                    scope = searchScope,
+                    sort = searchSort,
+                    onScopeChange = viewModel::updateSearchScope,
+                    onSortChange = viewModel::updateSearchSort,
                     topPadding = contentTopPadding,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -122,7 +136,7 @@ fun SearchScreen(
                 SearchResultsContent(
                     searchQuery = searchQuery,
                     lazyPagingItems = lazyPagingItems,
-                    onFileClick = onFileClick,
+                    onFileClick = { file -> viewModel.openSearchResult(file, onFileClick) },
                     topPadding = contentTopPadding,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -242,6 +256,10 @@ private fun SearchHeader(
 @Composable
 private fun EmptySearchContent(
     onQuickSearchClick: (String) -> Unit,
+    scope: FileListViewModel.SearchScope,
+    sort: FileListViewModel.SearchSort,
+    onScopeChange: (FileListViewModel.SearchScope) -> Unit,
+    onSortChange: (FileListViewModel.SearchSort) -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
@@ -277,12 +295,30 @@ private fun EmptySearchContent(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "现在会同时匹配标题和正文，先把内容找到，再决定要不要继续细分。",
+                        text = "同时匹配标题、正文和路径。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+        }
+
+        item {
+            SearchOptionSection(
+                title = "搜索范围",
+                options = listOf("当前库" to FileListViewModel.SearchScope.CURRENT_LIBRARY, "全库" to FileListViewModel.SearchScope.ALL_LIBRARIES),
+                selected = scope,
+                onSelected = onScopeChange
+            )
+        }
+
+        item {
+            SearchOptionSection(
+                title = "排序方式",
+                options = listOf("相关度" to FileListViewModel.SearchSort.RELEVANCE, "最近修改" to FileListViewModel.SearchSort.RECENT_MODIFIED),
+                selected = sort,
+                onSelected = onSortChange
+            )
         }
 
         item {
@@ -303,6 +339,29 @@ private fun EmptySearchContent(
                 onQuickSearchClick = onQuickSearchClick,
                 isRecent = true
             )
+        }
+    }
+}
+
+@Composable
+private fun <T> SearchOptionSection(
+    title: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelected: (T) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+        Spacer(modifier = Modifier.height(8.dp))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, (label, value) ->
+                SegmentedButton(
+                    selected = selected == value,
+                    onClick = { onSelected(value) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                    label = { Text(label) }
+                )
+            }
         }
     }
 }
@@ -400,7 +459,7 @@ private fun SearchSectionCard(
 private fun SearchResultsContent(
     searchQuery: String,
     lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
-    onFileClick: (String) -> Unit,
+    onFileClick: (MarkdownFileMeta) -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
@@ -474,7 +533,7 @@ private fun SearchResultsContent(
                                 file = file,
                                 onClick = {
                                     Timber.d("搜索页面点击文件: ${file.name}, uri: ${file.uri}")
-                                    onFileClick(file.uri)
+                                    onFileClick(file)
                                 }
                             )
                         }
@@ -653,6 +712,16 @@ private fun SearchResultItem(
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.primary
             )
+
+            if (file.libraryName.isNotBlank()) {
+                Text(
+                    text = file.libraryName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             if (file.preview.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
