@@ -1,6 +1,6 @@
 package com.bird.fiber.ui.screens.search
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Search
@@ -34,15 +34,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,7 +93,7 @@ fun SearchScreen(
     val statusBarTopPadding = with(density) {
         WindowInsets.statusBars.getTop(density).toDp()
     }
-    val contentTopPadding = statusBarTopPadding + 84.dp
+    val contentTopPadding = statusBarTopPadding + 56.dp
 
     LaunchedEffect(searchQuery) {
         viewModel.updateSearchQuery(searchQuery)
@@ -124,7 +125,6 @@ fun SearchScreen(
         ) {
             if (searchQuery.isBlank()) {
                 EmptySearchContent(
-                    onQuickSearchClick = { query -> searchQuery = query },
                     scope = searchScope,
                     sort = searchSort,
                     onScopeChange = viewModel::updateSearchScope,
@@ -136,6 +136,8 @@ fun SearchScreen(
                 SearchResultsContent(
                     searchQuery = searchQuery,
                     lazyPagingItems = lazyPagingItems,
+                    searchSort = searchSort,
+                    onSortChange = viewModel::updateSearchSort,
                     onFileClick = { file -> viewModel.openSearchResult(file, onFileClick) },
                     topPadding = contentTopPadding,
                     modifier = Modifier.fillMaxSize()
@@ -190,7 +192,7 @@ private fun SearchHeader(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 4.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBackClick, modifier = Modifier.size(40.dp)) {
@@ -202,51 +204,50 @@ private fun SearchHeader(
                         )
                     }
 
-                    TextField(
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp)
+                            .size(20.dp)
+                    )
+
+                    BasicTextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.weight(1f),
-                        placeholder = {
-                            Text(
-                                text = "搜标题、正文或路径",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
                         singleLine = true,
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = onClearClick, modifier = Modifier.size(32.dp)) {
-                                    Icon(
-                                        imageVector = Icons.Default.Clear,
-                                        contentDescription = "清除",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                            disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                            cursorColor = MaterialTheme.colorScheme.primary
-                        )
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "搜标题、正文或路径",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
+
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = onClearClick, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "清除",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(40.dp))
+                    }
                 }
             }
         }
@@ -255,7 +256,6 @@ private fun SearchHeader(
 
 @Composable
 private fun EmptySearchContent(
-    onQuickSearchClick: (String) -> Unit,
     scope: FileListViewModel.SearchScope,
     sort: FileListViewModel.SearchSort,
     onScopeChange: (FileListViewModel.SearchScope) -> Unit,
@@ -263,46 +263,11 @@ private fun EmptySearchContent(
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
-    val quickSearches = listOf("日报", "TODO", "会议", "灵感", "项目")
-    val recentSearches = listOf("日志", "项目", "想法", "会议", "记录")
-
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSystemInDarkTheme()) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLowest
-                    }
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 18.dp)
-                ) {
-                    Text(
-                        text = "搜索笔记",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "同时匹配标题、正文和路径。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
         item {
             SearchOptionSection(
                 title = "搜索范围",
@@ -321,25 +286,6 @@ private fun EmptySearchContent(
             )
         }
 
-        item {
-            SearchQuickSection(
-                title = "快捷入口",
-                subtitle = "用常搜词直接起步",
-                queries = quickSearches,
-                onQuickSearchClick = onQuickSearchClick,
-                isRecent = false
-            )
-        }
-
-        item {
-            SearchQuickSection(
-                title = "最近搜索",
-                subtitle = "先用静态占位，后面可以接真实历史",
-                queries = recentSearches,
-                onQuickSearchClick = onQuickSearchClick,
-                isRecent = true
-            )
-        }
     }
 }
 
@@ -366,99 +312,12 @@ private fun <T> SearchOptionSection(
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun SearchQuickSection(
-    title: String,
-    subtitle: String,
-    queries: List<String>,
-    onQuickSearchClick: (String) -> Unit,
-    isRecent: Boolean
-) {
-    SearchSectionCard(title = title, subtitle = subtitle) {
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            queries.forEach { query ->
-                SuggestionChip(
-                    onClick = { onQuickSearchClick(query) },
-                    label = { Text(query) },
-                    icon = {
-                        Icon(
-                            imageVector = if (isRecent) Icons.Default.AccessTime else Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = if (isRecent) {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        labelColor = if (isRecent) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        iconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(
-                            alpha = if (isRecent) 0.14f else 0.2f
-                        )
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchSectionCard(
-    title: String,
-    subtitle: String,
-    content: @Composable () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSystemInDarkTheme()) {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            content()
-        }
-    }
-}
-
 @Composable
 private fun SearchResultsContent(
     searchQuery: String,
     lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
+    searchSort: FileListViewModel.SearchSort,
+    onSortChange: (FileListViewModel.SearchSort) -> Unit,
     onFileClick: (MarkdownFileMeta) -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier
@@ -522,7 +381,9 @@ private fun SearchResultsContent(
                     item {
                         SearchSummaryCard(
                             searchQuery = searchQuery,
-                            resultCount = lazyPagingItems.itemCount
+                            resultCount = lazyPagingItems.itemCount,
+                            searchSort = searchSort,
+                            onSortChange = onSortChange
                         )
                     }
 
@@ -560,8 +421,11 @@ private fun SearchResultsContent(
 @Composable
 private fun SearchSummaryCard(
     searchQuery: String,
-    resultCount: Int
+    resultCount: Int,
+    searchSort: FileListViewModel.SearchSort,
+    onSortChange: (FileListViewModel.SearchSort) -> Unit
 ) {
+    var sortMenuExpanded by remember { mutableStateOf(false) }
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -595,6 +459,40 @@ private fun SearchSummaryCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            Box {
+                IconButton(onClick = { sortMenuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = "排序",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = sortMenuExpanded,
+                    onDismissRequest = { sortMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("相关性") },
+                        onClick = {
+                            onSortChange(FileListViewModel.SearchSort.RELEVANCE)
+                            sortMenuExpanded = false
+                        },
+                        trailingIcon = {
+                            if (searchSort == FileListViewModel.SearchSort.RELEVANCE) Text("✓")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("最近修改") },
+                        onClick = {
+                            onSortChange(FileListViewModel.SearchSort.RECENT_MODIFIED)
+                            sortMenuExpanded = false
+                        },
+                        trailingIcon = {
+                            if (searchSort == FileListViewModel.SearchSort.RECENT_MODIFIED) Text("✓")
+                        }
+                    )
+                }
             }
         }
     }

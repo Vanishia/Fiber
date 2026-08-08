@@ -1,5 +1,11 @@
 package com.bird.fiber.ui.navigation
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -77,7 +83,33 @@ fun FiberNavGraph(
             )
         }
 
-        composable(route = FiberRoute.SEARCH) {
+        composable(
+            route = FiberRoute.SEARCH,
+            enterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { it / 10 },
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(120, delayMillis = 30))
+            },
+            exitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { -it / 12 },
+                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(100))
+            },
+            popEnterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { -it / 12 },
+                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(120))
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { it / 10 },
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(100))
+            }
+        ) {
             SearchScreen(
                 onBackClick = { navController.popBackStack() },
                 onFileClick = { fileUri -> navigateToEditor(fileUri, false) }
