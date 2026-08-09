@@ -2,6 +2,7 @@ package com.bird.fiber.domain.usecase
 
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.repository.FileRepository
 import kotlinx.coroutines.flow.firstOrNull
@@ -31,13 +32,13 @@ class CreateMarkdownFileUseCase @Inject constructor(
     /**
      * 创建 Markdown 文件
      *
-     * @param folderUri 目标文件夹 URI（如果为 null，则使用当前选中的库）
+     * @param target 目标库（如果为 null，则使用当前选中的库）
      * @param content 文件内容
      * @param fileName 文件名（可选，不提供则自动生成）
      * @return 创建结果
      */
     suspend operator fun invoke(
-        folderUri: String? = null,
+        target: LibraryTarget? = null,
         content: String,
         fileName: String? = null
     ): FileResult<MarkdownFileMeta> {
@@ -49,10 +50,10 @@ class CreateMarkdownFileUseCase @Inject constructor(
         }
 
         // 2. 确定目标文件夹 URI
-        val actualFolderUri = folderUri ?: run {
-            // 如果未提供 folderUri，则使用当前选中的库
+        val actualTarget = target ?: run {
+            // 如果未提供 target，则使用当前选中的库
             try {
-                fileRepository.currentFolderUri.firstOrNull()
+                fileRepository.currentLibraryTarget.firstOrNull()
             } catch (e: Exception) {
                 return FileResult.Error(
                     FileError.Unknown("获取当前库失败: ${e.message}")
@@ -61,7 +62,7 @@ class CreateMarkdownFileUseCase @Inject constructor(
         }
 
         // 3. 检查是否有有效的文件夹 URI
-        if (actualFolderUri == null) {
+        if (actualTarget == null) {
             return FileResult.Error(
                 FileError.Unknown("未选择笔记库，请先添加库")
             )
@@ -72,7 +73,7 @@ class CreateMarkdownFileUseCase @Inject constructor(
 
         // 5. 调用 Repository 创建文件
         return fileRepository.createMarkdownFile(
-            folderUri = actualFolderUri,
+            target = actualTarget,
             fileName = actualFileName,
             content = content
         )

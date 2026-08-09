@@ -2,14 +2,15 @@ package com.bird.fiber.ui.screens.filelist
 
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.repository.FileRepository
 import javax.inject.Inject
 
 class FileListCommandRunner @Inject constructor(
     private val repository: FileRepository
 ) {
-    suspend fun createFile(folderUri: String, fileName: String): FileResult<MarkdownFileMeta> {
-        return repository.createMarkdownFile(folderUri, fileName)
+    suspend fun createFile(target: LibraryTarget, fileName: String): FileResult<MarkdownFileMeta> {
+        return repository.createMarkdownFile(target, fileName)
     }
 
     suspend fun deleteFile(fileUri: String): FileResult<Unit> {

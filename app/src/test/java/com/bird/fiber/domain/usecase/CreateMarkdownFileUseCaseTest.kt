@@ -2,6 +2,7 @@ package com.bird.fiber.domain.usecase
 
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.repository.FileRepository
 import io.mockk.coEvery
@@ -28,6 +29,8 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class CreateMarkdownFileUseCaseTest {
 
+    private val target = LibraryTarget("library-1", "content://test/folder")
+
     private lateinit var fileRepository: FileRepository
     private lateinit var generateFileName: GenerateFileNameUseCase
     private lateinit var useCase: CreateMarkdownFileUseCase
@@ -45,7 +48,7 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_withValidContent_createsFile() = runTest {
         // Arrange
         val content = "测试内容"
-        val folderUri = "content://test/folder"
+        val folderUri = target.folderUri
         val fileName = "测试文件"
         val expectedMeta = MarkdownFileMeta(
             uri = "content://test/file.md",
@@ -56,18 +59,18 @@ class CreateMarkdownFileUseCaseTest {
             preview = ""
         )
 
-        every { fileRepository.currentFolderUri } returns flowOf(folderUri)
+        every { fileRepository.currentLibraryTarget } returns flowOf(target)
         coEvery {
-            fileRepository.createMarkdownFile(folderUri, fileName, content)
+            fileRepository.createMarkdownFile(target, fileName, content)
         } returns FileResult.Success(expectedMeta)
 
         // Act
-        val result = useCase(folderUri = null, content = content, fileName = fileName)
+        val result = useCase(target = null, content = content, fileName = fileName)
 
         // Assert
         assertTrue(result is FileResult.Success)
         assertEquals(expectedMeta, (result as FileResult.Success).data)
-        coVerify { fileRepository.createMarkdownFile(folderUri, fileName, content) }
+        coVerify { fileRepository.createMarkdownFile(target, fileName, content) }
     }
 
     @Test
@@ -76,7 +79,7 @@ class CreateMarkdownFileUseCaseTest {
         val content = "   "
 
         // Act
-        val result = useCase(folderUri = "content://test", content = content)
+        val result = useCase(target = target, content = content)
 
         // Assert
         assertTrue(result is FileResult.Error)
@@ -91,7 +94,7 @@ class CreateMarkdownFileUseCaseTest {
         val content = ""
 
         // Act
-        val result = useCase(folderUri = "content://test", content = content)
+        val result = useCase(target = target, content = content)
 
         // Assert
         assertTrue(result is FileResult.Error)
@@ -103,7 +106,7 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_withoutFileName_generatesFileName() = runTest {
         // Arrange
         val content = "测试内容"
-        val folderUri = "content://test/folder"
+        val folderUri = target.folderUri
         val generatedName = "2025-01-01-12-00-00"
         val expectedMeta = MarkdownFileMeta(
             uri = "content://test/file.md",
@@ -114,14 +117,14 @@ class CreateMarkdownFileUseCaseTest {
             preview = ""
         )
 
-        every { fileRepository.currentFolderUri } returns flowOf(folderUri)
+        every { fileRepository.currentLibraryTarget } returns flowOf(target)
         every { generateFileName() } returns generatedName
         coEvery {
-            fileRepository.createMarkdownFile(folderUri, generatedName, content)
+            fileRepository.createMarkdownFile(target, generatedName, content)
         } returns FileResult.Success(expectedMeta)
 
         // Act
-        val result = useCase(folderUri = null, content = content, fileName = null)
+        val result = useCase(target = null, content = content, fileName = null)
 
         // Assert
         assertTrue(result is FileResult.Success)
@@ -132,19 +135,19 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_withProvidedFileName_usesProvidedName() = runTest {
         // Arrange
         val content = "测试内容"
-        val folderUri = "content://test/folder"
+        val folderUri = target.folderUri
         val providedName = "自定义文件名"
 
-        every { fileRepository.currentFolderUri } returns flowOf(folderUri)
+        every { fileRepository.currentLibraryTarget } returns flowOf(target)
         coEvery {
             fileRepository.createMarkdownFile(any(), any(), any())
         } returns FileResult.Success(mockk())
 
         // Act
-        useCase(folderUri = null, content = content, fileName = providedName)
+        useCase(target = null, content = content, fileName = providedName)
 
         // Assert
-        coVerify { fileRepository.createMarkdownFile(folderUri, providedName, content) }
+        coVerify { fileRepository.createMarkdownFile(target, providedName, content) }
         verify(exactly = 0) { generateFileName() }
     }
 
@@ -154,47 +157,47 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_withProvidedFolderUri_usesProvidedUri() = runTest {
         // Arrange
         val content = "测试内容"
-        val providedFolderUri = "content://provided/folder"
+        val providedTarget = LibraryTarget("provided-library", "content://provided/folder")
         val fileName = "测试文件"
 
         coEvery {
-            fileRepository.createMarkdownFile(providedFolderUri, fileName, content)
+            fileRepository.createMarkdownFile(providedTarget, fileName, content)
         } returns FileResult.Success(mockk())
 
         // Act
-        useCase(folderUri = providedFolderUri, content = content, fileName = fileName)
+        useCase(target = providedTarget, content = content, fileName = fileName)
 
         // Assert
-        coVerify { fileRepository.createMarkdownFile(providedFolderUri, fileName, content) }
+        coVerify { fileRepository.createMarkdownFile(providedTarget, fileName, content) }
     }
 
     @Test
     fun invoke_withoutFolderUri_usesCurrentLibrary() = runTest {
         // Arrange
         val content = "测试内容"
-        val currentLibraryUri = "content://current/library"
+        val currentTarget = LibraryTarget("current-library", "content://current/library")
         val fileName = "测试文件"
 
-        every { fileRepository.currentFolderUri } returns flowOf(currentLibraryUri)
+        every { fileRepository.currentLibraryTarget } returns flowOf(currentTarget)
         coEvery {
             fileRepository.createMarkdownFile(any(), any(), any())
         } returns FileResult.Success(mockk())
 
         // Act
-        useCase(folderUri = null, content = content, fileName = fileName)
+        useCase(target = null, content = content, fileName = fileName)
 
         // Assert
-        coVerify { fileRepository.createMarkdownFile(currentLibraryUri, fileName, content) }
+        coVerify { fileRepository.createMarkdownFile(currentTarget, fileName, content) }
     }
 
     @Test
     fun invoke_noLibrarySelected_returnsError() = runTest {
         // Arrange
         val content = "测试内容"
-        every { fileRepository.currentFolderUri } returns flowOf(null)
+        every { fileRepository.currentLibraryTarget } returns flowOf(null)
 
         // Act
-        val result = useCase(folderUri = null, content = content)
+        val result = useCase(target = null, content = content)
 
         // Assert
         assertTrue(result is FileResult.Error)
@@ -209,18 +212,18 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_repositoryError_returnsError() = runTest {
         // Arrange
         val content = "测试内容"
-        val folderUri = "content://test/folder"
+        val folderUri = target.folderUri
         val fileName = "测试文件"
         val error = FileError.IOFailed(folderUri, Exception("磁盘已满"))
 
-        every { fileRepository.currentFolderUri } returns flowOf(folderUri)
+        every { fileRepository.currentLibraryTarget } returns flowOf(target)
         every { generateFileName() } returns fileName
         coEvery {
-            fileRepository.createMarkdownFile(eq(folderUri), eq(fileName), eq(content))
+            fileRepository.createMarkdownFile(eq(target), eq(fileName), eq(content))
         } returns FileResult.Error(error)
 
         // Act
-        val result = useCase(folderUri = null, content = content)
+        val result = useCase(target = null, content = content)
 
         // Assert
         assertTrue(result is FileResult.Error)
@@ -232,10 +235,10 @@ class CreateMarkdownFileUseCaseTest {
     fun invoke_repositoryThrowsException_returnsError() = runTest {
         // Arrange
         val content = "测试内容"
-        every { fileRepository.currentFolderUri } throws RuntimeException("数据库错误")
+        every { fileRepository.currentLibraryTarget } throws RuntimeException("数据库错误")
 
         // Act
-        val result = useCase(folderUri = null, content = content)
+        val result = useCase(target = null, content = content)
 
         // Assert
         assertTrue(result is FileResult.Error)

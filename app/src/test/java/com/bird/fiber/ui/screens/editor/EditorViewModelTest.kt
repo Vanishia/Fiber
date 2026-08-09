@@ -10,6 +10,7 @@ import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.data.model.Attachment
+import com.bird.fiber.data.model.LibraryTarget
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.utils.TestCoroutineRule
@@ -144,7 +145,7 @@ class EditorViewModelTest {
                 displayName = "image.png",
                 relativePath = "attachments/image.png",
                 uri = "content://test/image.png",
-                libraryFolderUri = "content://test/library"
+                libraryTarget = LibraryTarget("library-1", "content://test/library")
             )
         )
         viewModel.loadFile(fileUri)

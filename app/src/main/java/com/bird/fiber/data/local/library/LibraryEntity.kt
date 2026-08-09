@@ -2,6 +2,7 @@ package com.bird.fiber.data.local.library
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.bird.fiber.data.model.LibraryTarget
 
 /**
  * 笔记库实体
@@ -23,4 +24,9 @@ data class LibraryEntity(
     val createdAt: Long,               // 创建时间戳
     val lastOpenedAt: Long = createdAt,// 最后打开时间
     val isActive: Boolean = false      // 是否是当前激活的库
+)
+
+fun LibraryEntity.toTarget(): LibraryTarget = LibraryTarget(
+    libraryId = id,
+    folderUri = folderUri
 )

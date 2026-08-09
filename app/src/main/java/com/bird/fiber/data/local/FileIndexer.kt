@@ -118,7 +118,7 @@ class FileIndexer internal constructor(
         libraryId: String,
         rootFolderUri: String,
         fileUri: String
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
             try {
                 val scannedFile = scanner.scanSingleFile(
@@ -126,7 +126,7 @@ class FileIndexer internal constructor(
                     libraryId = libraryId,
                     rootFolderUri = rootFolderUri,
                     fileUri = fileUri
-                ) ?: return@withContext
+                ) ?: return@withLock false
 
                 val content = contentReader.read(contentResolver, Uri.parse(scannedFile.uri))
 
@@ -137,8 +137,10 @@ class FileIndexer internal constructor(
                     hasImage = MarkdownUtils.containsImage(content)
                 )
                 Timber.d("FileIndexer: inserted file=%s", scannedFile.name)
+                true
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: insert file failed uri=%s", fileUri)
+                false
             }
         }
     }

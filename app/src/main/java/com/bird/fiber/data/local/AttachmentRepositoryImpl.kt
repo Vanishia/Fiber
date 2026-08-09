@@ -11,7 +11,9 @@ import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.local.library.toTarget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -31,11 +33,12 @@ class AttachmentRepositoryImpl @Inject constructor(
 
     override suspend fun copyImage(
         sourceUri: String,
-        libraryFolderUri: String?
+        target: LibraryTarget?
     ): FileResult<Attachment> = withContext(Dispatchers.IO) {
-        val targetFolderUri = libraryFolderUri
-            ?: libraryRepository.getActiveLibrary().firstOrNull()?.folderUri
+        val libraryTarget = target
+            ?: libraryRepository.getActiveLibrary().firstOrNull()?.toTarget()
             ?: return@withContext FileResult.Error(FileError.Unknown("未选择笔记库，请先添加库"))
+        val targetFolderUri = libraryTarget.folderUri
 
         val source = sourceUri.toUri()
         var createdFile: DocumentFile? = null
@@ -83,7 +86,7 @@ class AttachmentRepositoryImpl @Inject constructor(
                     displayName = actualFileName,
                     relativePath = "$ATTACHMENTS_DIRECTORY/$actualFileName",
                     uri = createdFile.uri.toString(),
-                    libraryFolderUri = targetFolderUri
+                    libraryTarget = libraryTarget
                 )
             )
         } catch (e: SecurityException) {

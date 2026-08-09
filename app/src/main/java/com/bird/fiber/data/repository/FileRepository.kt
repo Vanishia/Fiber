@@ -1,6 +1,7 @@
 package com.bird.fiber.data.repository
 
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.MarkdownFileMeta
 import kotlinx.coroutines.flow.Flow
 
@@ -15,7 +16,7 @@ interface FileRepository {
     /**
      * 监听当前选择的文件夹URI
      */
-    val currentFolderUri: Flow<String?>
+    val currentLibraryTarget: Flow<LibraryTarget?>
 
     /**
      * 选择并保存根文件夹
@@ -38,7 +39,7 @@ interface FileRepository {
      * @return 创建的文件
      */
     suspend fun createMarkdownFile(
-        folderUri: String,
+        target: LibraryTarget,
         fileName: String,
         content: String = ""
     ): FileResult<MarkdownFileMeta>

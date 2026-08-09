@@ -6,13 +6,16 @@ import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.domain.usecase.CreateMarkdownFileUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.data.model.Attachment
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
@@ -41,7 +44,12 @@ class QuickNoteViewModelTest {
     private lateinit var createMarkdownFile: CreateMarkdownFileUseCase
     private lateinit var eventBus: EventBus
     private lateinit var attachmentRepository: AttachmentRepository
+    private lateinit var fileRepository: FileRepository
     private lateinit var viewModel: QuickNoteViewModel
+
+    private val targetA = LibraryTarget("library-a", "content://test/library-a")
+    private val targetB = LibraryTarget("library-b", "content://test/library-b")
+    private lateinit var activeTarget: MutableStateFlow<LibraryTarget?>
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -51,7 +59,10 @@ class QuickNoteViewModelTest {
         createMarkdownFile = mockk()
         eventBus = mockk(relaxed = true)
         attachmentRepository = mockk(relaxed = true)
-        viewModel = QuickNoteViewModel(createMarkdownFile, eventBus, attachmentRepository)
+        fileRepository = mockk()
+        activeTarget = MutableStateFlow(targetA)
+        every { fileRepository.currentLibraryTarget } returns activeTarget
+        viewModel = QuickNoteViewModel(createMarkdownFile, eventBus, attachmentRepository, fileRepository)
     }
 
     @After
@@ -88,7 +99,7 @@ class QuickNoteViewModelTest {
     @Test
     fun clearError_clearsErrorState() = runTest {
         // Arrange
-        coEvery { createMarkdownFile(folderUri = null, content = "内容", fileName = null) } returns FileResult.Error(
+        coEvery { createMarkdownFile(target = targetA, content = "内容", fileName = null) } returns FileResult.Error(
             FileError.Unknown("测试错误")
         )
 
@@ -121,7 +132,7 @@ class QuickNoteViewModelTest {
             preview = ""
         )
 
-        coEvery { createMarkdownFile(folderUri = null, content = content, fileName = null) } returns
+        coEvery { createMarkdownFile(target = targetA, content = content, fileName = null) } returns
             FileResult.Success(fileMeta)
         coEvery { eventBus.emit(any<AppEvent.FileCreated>()) } just Runs
 
@@ -220,7 +231,7 @@ class QuickNoteViewModelTest {
         // Arrange
         val content = "笔记内容"
 
-        coEvery { createMarkdownFile(folderUri = null, content = content, fileName = null) } coAnswers {
+        coEvery { createMarkdownFile(target = targetA, content = content, fileName = null) } coAnswers {
             delay(100)
             FileResult.Success(mockk<MarkdownFileMeta> {
                 every { uri } returns "content://test/note.md"
@@ -242,8 +253,8 @@ class QuickNoteViewModelTest {
     fun saveNote_clearsPreviousError() = runTest {
         // Arrange
         val error = FileError.Unknown("上次错误")
-        coEvery { createMarkdownFile(folderUri = null, content = "内容1", fileName = null) } returns FileResult.Error(error)
-        coEvery { createMarkdownFile(folderUri = null, content = "内容2", fileName = null) } returns FileResult.Success(
+        coEvery { createMarkdownFile(target = targetA, content = "内容1", fileName = null) } returns FileResult.Error(error)
+        coEvery { createMarkdownFile(target = targetA, content = "内容2", fileName = null) } returns FileResult.Success(
             mockk<MarkdownFileMeta> {
                 every { uri } returns "content://test/note2.md"
             }
@@ -271,7 +282,7 @@ class QuickNoteViewModelTest {
     fun saveNote_withWhitespaceContent_callsUseCase() = runTest {
         // Arrange
         val content = "   有内容   "
-        coEvery { createMarkdownFile(folderUri = null, content = content, fileName = null) } returns FileResult.Success(
+        coEvery { createMarkdownFile(target = targetA, content = content, fileName = null) } returns FileResult.Success(
             mockk<MarkdownFileMeta> {
                 every { uri } returns "content://test/whitespace.md"
             }
@@ -284,14 +295,14 @@ class QuickNoteViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        coVerify { createMarkdownFile(folderUri = null, content = content, fileName = null) }
+        coVerify { createMarkdownFile(target = targetA, content = content, fileName = null) }
     }
 
     @Test
     fun saveNote_concurrentCalls_handledCorrectly() = runTest {
         // Arrange
         val content = "笔记内容"
-        coEvery { createMarkdownFile(folderUri = null, content = any<String>()) } returns FileResult.Success(
+        coEvery { createMarkdownFile(target = targetA, content = any<String>()) } returns FileResult.Success(
             mockk<MarkdownFileMeta> {
                 every { uri } returns "content://test/concurrent.md"
             }
@@ -305,7 +316,7 @@ class QuickNoteViewModelTest {
         advanceUntilIdle()
 
         // Assert - 应该只调用一次 UseCase（当前实现没有并发保护，按实际行为调整为至少一次）
-        coVerify(atLeast = 1) { createMarkdownFile(folderUri = null, content = content, fileName = null) }
+        coVerify(atLeast = 1) { createMarkdownFile(target = targetA, content = content, fileName = null) }
     }
 
     // ==================== 初始状态测试 ====================
@@ -325,11 +336,11 @@ class QuickNoteViewModelTest {
             displayName = "image.png",
             relativePath = "attachments/image.png",
             uri = "content://test/image.png",
-            libraryFolderUri = "content://test/library"
+            libraryTarget = targetA
         )
-        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns FileResult.Success(attachment)
         coEvery {
-            createMarkdownFile(folderUri = "content://test/library", content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
         } returns FileResult.Success(
             MarkdownFileMeta("content://test/note.md", "note", "note.md", 0L, 0L)
         )
@@ -340,8 +351,61 @@ class QuickNoteViewModelTest {
         advanceUntilIdle()
 
         coVerify {
-            createMarkdownFile(folderUri = "content://test/library", content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
         }
         assertTrue(viewModel.uiState.value.attachments.isEmpty())
+    }
+
+    @Test
+    fun saveNote_afterLibrarySwitch_usesTargetLockedByFirstContent() = runTest {
+        val content = "属于 A 的草稿"
+        coEvery {
+            createMarkdownFile(target = targetA, content = content, fileName = null)
+        } returns FileResult.Success(
+            MarkdownFileMeta("content://test/library-a/note.md", "note", "note.md", 0L, 0L)
+        )
+
+        viewModel.onContentChange(content)
+        advanceUntilIdle()
+        activeTarget.value = targetB
+        viewModel.saveNote()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            createMarkdownFile(target = targetA, content = content, fileName = null)
+        }
+        coVerify(exactly = 0) {
+            createMarkdownFile(target = targetB, content = any(), fileName = any())
+        }
+    }
+
+    @Test
+    fun saveNote_withAttachmentAfterLibrarySwitch_usesAttachmentTarget() = runTest {
+        val attachment = Attachment(
+            displayName = "image.png",
+            relativePath = "attachments/image.png",
+            uri = "content://test/library-a/image.png",
+            libraryTarget = targetA
+        )
+        coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
+            FileResult.Success(attachment)
+        coEvery {
+            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+        } returns FileResult.Success(
+            MarkdownFileMeta("content://test/library-a/note.md", "note", "note.md", 0L, 0L)
+        )
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        activeTarget.value = targetB
+        viewModel.saveNote()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            attachmentRepository.copyImage("content://source/image", targetA)
+        }
+        coVerify(exactly = 1) {
+            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+        }
     }
 }

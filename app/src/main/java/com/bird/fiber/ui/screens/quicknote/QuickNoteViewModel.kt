@@ -5,17 +5,21 @@ import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.data.model.FileResult
-import com.bird.fiber.data.model.FileError
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.domain.usecase.CreateMarkdownFileUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.repository.FileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -37,7 +41,8 @@ import javax.inject.Inject
 class QuickNoteViewModel @Inject constructor(
     private val createMarkdownFile: CreateMarkdownFileUseCase,
     private val eventBus: EventBus,
-    private val attachmentRepository: AttachmentRepository
+    private val attachmentRepository: AttachmentRepository,
+    private val fileRepository: FileRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(QuickNoteUiState())
@@ -47,12 +52,19 @@ class QuickNoteViewModel @Inject constructor(
     private val _events = Channel<QuickNoteEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
+    private val draftTargetMutex = Mutex()
+    private var draftTarget: LibraryTarget? = null
+
     /**
      * 更新输入内容
      */
     fun onContentChange(content: String) {
         Timber.d("QuickNoteViewModel: onContentChange('${_uiState.value.content}' -> '$content')")
+        val shouldLockTarget = _uiState.value.content.isBlank() && content.isNotBlank() && draftTarget == null
         _uiState.value = _uiState.value.copy(content = content)
+        if (shouldLockTarget) {
+            viewModelScope.launch { resolveDraftTarget() }
+        }
     }
 
     /**
@@ -66,8 +78,15 @@ class QuickNoteViewModel @Inject constructor(
         if (_uiState.value.isAddingImage) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
-            val targetLibrary = _uiState.value.attachments.firstOrNull()?.libraryFolderUri
-            when (val result = attachmentRepository.copyImage(sourceUri, targetLibrary)) {
+            val target = resolveDraftTarget()
+            if (target == null) {
+                _uiState.value = _uiState.value.copy(
+                    isAddingImage = false,
+                    error = "未选择笔记库，请先添加库"
+                )
+                return@launch
+            }
+            when (val result = attachmentRepository.copyImage(sourceUri, target)) {
                 is FileResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         attachments = _uiState.value.attachments + result.data,
@@ -109,9 +128,18 @@ class QuickNoteViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true, error = null)
 
+            val target = resolveDraftTarget()
+            if (target == null) {
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    error = "未选择笔记库，请先添加库"
+                )
+                return@launch
+            }
+
             // 调用 UseCase 创建文件
             when (val result = createMarkdownFile(
-                folderUri = _uiState.value.attachments.firstOrNull()?.libraryFolderUri,
+                target = target,
                 content = content
             )) {
                 is FileResult.Success -> {
@@ -125,6 +153,7 @@ class QuickNoteViewModel @Inject constructor(
                         content = "",
                         attachments = emptyList()
                     )
+                    draftTargetMutex.withLock { draftTarget = null }
                     Timber.d("QuickNoteViewModel: content 已清空")
 
                     // 通过 Channel 通知 UI 层关闭页面
@@ -154,6 +183,10 @@ class QuickNoteViewModel @Inject constructor(
             references.isBlank() -> state.content
             else -> state.content.trimEnd() + "\n\n" + references
         }
+    }
+
+    private suspend fun resolveDraftTarget(): LibraryTarget? = draftTargetMutex.withLock {
+        draftTarget ?: fileRepository.currentLibraryTarget.firstOrNull()?.also { draftTarget = it }
     }
 }
 

@@ -15,6 +15,7 @@ import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.toMarkdownFileMeta
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -242,15 +243,16 @@ class FileListViewModel @Inject constructor(
 
     private fun createFile(fileName: String) {
         viewModelScope.launch {
+            val libraryId = _currentLibraryId.value
             val folderUri = _uiState.value.currentFolderUri
-            if (folderUri == null) {
+            if (libraryId == null || folderUri == null) {
                 _uiState.value = _uiState.value.copy(error = "请先选择文件夹")
                 return@launch
             }
 
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            when (val result = commandRunner.createFile(folderUri, fileName)) {
+            when (val result = commandRunner.createFile(LibraryTarget(libraryId, folderUri), fileName)) {
                 is FileResult.Success -> {
                     _fileCreatedEvents.tryEmit(result.data)
                     _uiState.value = _uiState.value.copy(isLoading = false, error = null)

@@ -5,8 +5,10 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.toTarget
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.repository.FileRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -31,8 +33,8 @@ class FileRepositoryImpl @Inject constructor(
         private const val MARKDOWN_EXTENSION = ".md"
     }
 
-    override val currentFolderUri: Flow<String?> = libraryRepository.getActiveLibrary()
-        .map { it?.folderUri }
+    override val currentLibraryTarget: Flow<LibraryTarget?> = libraryRepository.getActiveLibrary()
+        .map { it?.toTarget() }
 
     override suspend fun selectRootFolder(): FileResult<String> = withContext(Dispatchers.IO) {
         FileResult.Error(FileError.Unknown("需要通过 Activity 启动文件夹选择器"))
@@ -58,15 +60,15 @@ class FileRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createMarkdownFile(
-        folderUri: String,
+        target: LibraryTarget,
         fileName: String,
         content: String
     ): FileResult<MarkdownFileMeta> = ioFileResult(
-        target = folderUri,
+        target = target.folderUri,
         action = "create"
     ) {
         val finalFileName = ensureMarkdownExtension(fileName)
-        val folderTreeUri = Uri.parse(folderUri)
+        val folderTreeUri = Uri.parse(target.folderUri)
         val documentUri = DocumentsContract.buildDocumentUriUsingTree(
             folderTreeUri,
             DocumentsContract.getTreeDocumentId(folderTreeUri)
@@ -78,37 +80,49 @@ class FileRepositoryImpl @Inject constructor(
             "text/markdown",
             finalFileName
         ) ?: return@ioFileResult FileResult.Error(
-            FileError.IOFailed(folderUri, IllegalStateException("无法创建文档"))
+            FileError.IOFailed(target.folderUri, IllegalStateException("无法创建文档"))
         )
 
-        if (content.isNotEmpty()) {
-            context.contentResolver.openOutputStream(newFileUri, "wt")?.use { outputStream ->
-                outputStream.write(content.toByteArray())
-                outputStream.flush()
+        try {
+            if (content.isNotEmpty()) {
+                val outputStream = context.contentResolver.openOutputStream(newFileUri, "wt")
+                    ?: throw IllegalStateException("无法写入新建文档")
+                outputStream.use {
+                    it.write(content.toByteArray())
+                    it.flush()
+                }
             }
-        }
 
-        val metadata = queryFileMetadata(newFileUri, finalFileName)
-        val activeLibrary = libraryRepository.getActiveLibrary().firstOrNull()
-        if (activeLibrary != null) {
-            fileIndexer.insertFile(
+            val indexed = fileIndexer.insertFile(
                 contentResolver = context.contentResolver,
-                libraryId = activeLibrary.id,
-                rootFolderUri = activeLibrary.folderUri,
+                libraryId = target.libraryId,
+                rootFolderUri = target.folderUri,
                 fileUri = newFileUri.toString()
             )
-        }
+            if (!indexed) {
+                throw IllegalStateException("无法写入文件索引")
+            }
 
-        FileResult.Success(
-            MarkdownFileMeta(
-                uri = newFileUri.toString(),
-                name = metadata.displayName.removeSuffix(MARKDOWN_EXTENSION),
-                path = metadata.displayName,
-                lastModified = metadata.lastModified,
-                size = metadata.size,
-                preview = ""
+            val metadata = queryFileMetadata(newFileUri, finalFileName)
+            FileResult.Success(
+                MarkdownFileMeta(
+                    uri = newFileUri.toString(),
+                    name = metadata.displayName.removeSuffix(MARKDOWN_EXTENSION),
+                    path = metadata.displayName,
+                    lastModified = metadata.lastModified,
+                    size = metadata.size,
+                    preview = ""
+                )
             )
-        )
+        } catch (e: Exception) {
+            fileIndexer.deleteFile(newFileUri.toString())
+            runCatching {
+                DocumentsContract.deleteDocument(context.contentResolver, newFileUri)
+            }.onFailure { cleanupError ->
+                Timber.e(cleanupError, "FileRepository: cleanup failed file=%s", newFileUri)
+            }
+            throw e
+        }
     }
 
     override suspend fun saveFileContent(fileUri: String, content: String): FileResult<Unit> = ioFileResult(
