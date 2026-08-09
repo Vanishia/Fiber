@@ -1,6 +1,7 @@
 package com.bird.fiber.data.local
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -9,11 +10,15 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.core.net.toUri
 import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.model.Attachment
+import com.bird.fiber.data.model.AttachmentDeletionSummary
+import com.bird.fiber.data.model.AttachmentReference
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.LibraryTarget
+import com.bird.fiber.data.model.ManagedAttachment
 import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.data.local.library.toTarget
+import com.bird.fiber.utils.MarkdownUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -21,6 +26,9 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -118,6 +126,126 @@ class AttachmentRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun listForLibrary(
+        libraryId: String
+    ): FileResult<List<ManagedAttachment>> = withContext(Dispatchers.IO) {
+        try {
+            val library = libraryRepository.getLibraryById(libraryId)
+                ?: return@withContext FileResult.Error(FileError.NotFound(libraryId))
+            val root = DocumentFile.fromTreeUri(context, library.folderUri.toUri())
+                ?: return@withContext FileResult.Error(FileError.NotFound(library.folderUri))
+            val attachmentsDirectory = root.findFile(ATTACHMENTS_DIRECTORY)
+                ?: return@withContext FileResult.Success(emptyList())
+            if (!attachmentsDirectory.isDirectory) {
+                return@withContext FileResult.Error(
+                    FileError.IOFailed(
+                        library.folderUri,
+                        IllegalStateException("attachments 不是文件夹")
+                    )
+                )
+            }
+
+            val filesWithDestinations = MarkdownFileScanner().scan(
+                contentResolver = context.contentResolver,
+                folderUri = library.folderUri,
+                libraryId = libraryId
+            ).map { file ->
+                val content = readMarkdownContent(file.uri)
+                MarkdownAttachmentSource(
+                    fileUri = file.uri,
+                    fileName = file.name,
+                    content = content,
+                    destinations = MarkdownUtils.extractImageDestinations(content)
+                        .mapNotNull(::normalizeAttachmentPath)
+                        .toSet()
+                )
+            }
+
+            val attachments = attachmentsDirectory.listFiles().mapNotNull { file ->
+                if (!file.isFile) return@mapNotNull null
+                val name = file.name ?: return@mapNotNull null
+                val relativePath = "$ATTACHMENTS_DIRECTORY/$name"
+                val dimensions = readImageDimensions(file.uri)
+                val mimeType = file.type
+                if (mimeType?.startsWith("image/") != true && dimensions.first <= 0) {
+                    return@mapNotNull null
+                }
+
+                ManagedAttachment(
+                    displayName = name,
+                    relativePath = relativePath,
+                    uri = file.uri.toString(),
+                    mimeType = mimeType,
+                    size = file.length(),
+                    lastModified = file.lastModified(),
+                    width = dimensions.first,
+                    height = dimensions.second,
+                    referencedBy = findAttachmentReferences(
+                        relativePath = relativePath,
+                        filesWithDestinations = filesWithDestinations
+                    )
+                )
+            }.sortedWith(
+                compareByDescending<ManagedAttachment> { it.lastModified }
+                    .thenBy { it.displayName.lowercase() }
+            )
+
+            FileResult.Success(attachments)
+        } catch (e: SecurityException) {
+            Timber.e(e, "AttachmentRepository: list permission denied library=%s", libraryId)
+            FileResult.Error(FileError.PermissionDenied(libraryId))
+        } catch (e: Exception) {
+            Timber.e(e, "AttachmentRepository: list failed library=%s", libraryId)
+            FileResult.Error(FileError.IOFailed(libraryId, e))
+        }
+    }
+
+    override suspend fun deleteOrphans(
+        libraryId: String,
+        uris: Set<String>
+    ): FileResult<AttachmentDeletionSummary> = withContext(Dispatchers.IO) {
+        if (uris.isEmpty()) {
+            return@withContext FileResult.Success(AttachmentDeletionSummary(0, 0, 0))
+        }
+
+        when (val currentResult = listForLibrary(libraryId)) {
+            is FileResult.Error -> FileResult.Error(currentResult.error)
+            is FileResult.Loading -> FileResult.Loading
+            is FileResult.Success -> {
+                val requested = currentResult.data.filter { it.uri in uris }
+                var deletedCount = 0
+                var skippedReferencedCount = 0
+                var failedCount = uris.size - requested.size
+
+                requested.forEach { attachment ->
+                    if (attachment.isReferenced) {
+                        skippedReferencedCount++
+                        return@forEach
+                    }
+
+                    try {
+                        if (DocumentsContract.deleteDocument(context.contentResolver, attachment.uri.toUri())) {
+                            deletedCount++
+                        } else {
+                            failedCount++
+                        }
+                    } catch (e: Exception) {
+                        failedCount++
+                        Timber.e(e, "AttachmentRepository: orphan delete failed uri=%s", attachment.uri)
+                    }
+                }
+
+                FileResult.Success(
+                    AttachmentDeletionSummary(
+                        deletedCount = deletedCount,
+                        skippedReferencedCount = skippedReferencedCount,
+                        failedCount = failedCount
+                    )
+                )
+            }
+        }
+    }
+
     override fun resolveUri(markdownFileUri: String, relativePath: String): String? {
         val normalized = relativePath.removePrefix("./").replace('\\', '/')
         if (!normalized.startsWith("$ATTACHMENTS_DIRECTORY/") || ".." in normalized.split('/')) {
@@ -156,11 +284,69 @@ class AttachmentRepositoryImpl @Inject constructor(
         return fromName ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
     }
 
+    private fun readImageDimensions(uri: Uri): Pair<Int, Int> {
+        return runCatching {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+            options.outWidth to options.outHeight
+        }.getOrDefault(0 to 0)
+    }
+
+    private fun readMarkdownContent(uri: String): String {
+        return context.contentResolver.openInputStream(uri.toUri())?.bufferedReader()?.use {
+            it.readText()
+        } ?: throw IOException("无法读取 Markdown 文件: $uri")
+    }
+
     companion object {
         const val ATTACHMENTS_DIRECTORY = "attachments"
         private val EXTENSION_PATTERN = Regex("[a-z0-9]{1,8}")
     }
 }
+
+internal fun normalizeAttachmentPath(destination: String): String? {
+    val decoded = runCatching {
+        URLDecoder.decode(
+            destination.replace("+", "%2B"),
+            StandardCharsets.UTF_8.name()
+        )
+    }.getOrDefault(destination)
+    val normalized = decoded
+        .trim()
+        .removePrefix("<")
+        .removeSuffix(">")
+        .replace('\\', '/')
+        .removePrefix("./")
+    return normalized.takeIf {
+        it.startsWith("${AttachmentRepositoryImpl.ATTACHMENTS_DIRECTORY}/") &&
+            ".." !in it.split('/')
+    }
+}
+
+internal fun findAttachmentReferences(
+    relativePath: String,
+    filesWithDestinations: List<MarkdownAttachmentSource>
+): List<AttachmentReference> {
+    val legacyPattern = Regex(
+        """!\[[^]]*]\(\s*<?(?:\./)?${Regex.escape(relativePath)}>?(?:\s+[\"'][^\"']*[\"'])?\s*\)"""
+    )
+    return filesWithDestinations.mapNotNull { file ->
+        if (relativePath in file.destinations || legacyPattern.containsMatchIn(file.content)) {
+            AttachmentReference(fileUri = file.fileUri, fileName = file.fileName)
+        } else {
+            null
+        }
+    }
+}
+
+internal data class MarkdownAttachmentSource(
+    val fileUri: String,
+    val fileName: String,
+    val content: String,
+    val destinations: Set<String>
+)
 
 internal object AttachmentFileNameGenerator {
     fun generate(

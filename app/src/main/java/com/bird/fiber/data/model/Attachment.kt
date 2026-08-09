@@ -6,5 +6,5 @@ data class Attachment(
     val uri: String,
     val libraryTarget: LibraryTarget
 ) {
-    fun toMarkdown(): String = "![图片]($relativePath)"
+    fun toMarkdown(): String = "![图片](<$relativePath>)"
 }

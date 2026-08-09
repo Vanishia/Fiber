@@ -185,8 +185,8 @@ class EditorViewModelTest {
         viewModel.addImage("content://source/image")
         advanceUntilIdle()
 
-        assertEquals("前![图片](attachments/image.png)后", viewModel.uiState.value.content)
-        assertEquals(TextRange(29), viewModel.uiState.value.textValue.selection)
+        assertEquals("前![图片](<attachments/image.png>)后", viewModel.uiState.value.content)
+        assertEquals(TextRange(31), viewModel.uiState.value.textValue.selection)
     }
 
     @Test

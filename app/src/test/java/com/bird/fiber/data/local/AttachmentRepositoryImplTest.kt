@@ -16,6 +16,8 @@ import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import java.time.LocalDateTime
 
 class AttachmentRepositoryImplTest {
@@ -87,5 +89,36 @@ class AttachmentRepositoryImplTest {
         )
 
         assertTrue(fileName == "diagram-20260809-153012-a1b2.png")
+    }
+
+    @Test
+    fun normalizeAttachmentPath_acceptsRelativeAndEncodedAttachmentPaths() {
+        assertEquals(
+            "attachments/image one.png",
+            normalizeAttachmentPath("./attachments/image%20one.png")
+        )
+        assertNull(normalizeAttachmentPath("../attachments/image.png"))
+        assertNull(normalizeAttachmentPath("https://example.com/image.png"))
+    }
+
+    @Test
+    fun findAttachmentReferences_supportsParsedAndLegacySpacePaths() {
+        val relativePath = "attachments/image one.png"
+        val parsed = MarkdownAttachmentSource(
+            fileUri = "content://test/parsed",
+            fileName = "parsed",
+            content = "![图片](<attachments/image one.png>)",
+            destinations = setOf(relativePath)
+        )
+        val legacy = MarkdownAttachmentSource(
+            fileUri = "content://test/legacy",
+            fileName = "legacy",
+            content = "![图片](attachments/image one.png)",
+            destinations = emptySet()
+        )
+
+        val references = findAttachmentReferences(relativePath, listOf(parsed, legacy))
+
+        assertEquals(listOf("parsed", "legacy"), references.map { it.fileName })
     }
 }

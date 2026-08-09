@@ -1,5 +1,6 @@
 package com.bird.fiber.ui.navigation
 
+import android.net.Uri
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.bird.fiber.ui.screens.editor.EditorScreen
+import com.bird.fiber.ui.screens.attachments.AttachmentManagerScreen
 import com.bird.fiber.ui.screens.main.MainScreenContainer
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
 import com.bird.fiber.ui.screens.search.SearchScreen
@@ -46,6 +48,9 @@ fun FiberNavGraph(
                 onAddLibrary = onAddLibrary,
                 onSearchClick = { navController.navigate(FiberRoute.SEARCH) },
                 onSettingsClick = { navController.navigate(FiberRoute.SETTINGS) },
+                onManageAttachments = { libraryId ->
+                    navController.navigate(FiberRoute.attachments(libraryId))
+                },
                 topBarModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
                     animatedVisibilityScope = this
@@ -101,6 +106,17 @@ fun FiberNavGraph(
                 onBackClick = { navController.popBackStack() }
             )
         }
+
+        composable(
+            route = FiberRoute.ATTACHMENTS,
+            arguments = listOf(
+                navArgument(FiberRoute.ARG_LIBRARY_ID) { type = NavType.StringType }
+            )
+        ) {
+            AttachmentManagerScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
         }
     }
 }
@@ -127,6 +143,7 @@ private fun decodeFileUriOrPop(
 object FiberRoute {
     const val ARG_ENCODED_FILE_URI = "encodedFileUri"
     const val ARG_EDITOR_MODE = "mode"
+    const val ARG_LIBRARY_ID = "libraryId"
     const val MODE_PREVIEW = "preview"
     const val MODE_EDIT = "edit"
 
@@ -135,6 +152,7 @@ object FiberRoute {
     const val QUICKNOTE = "quicknote"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+    const val ATTACHMENTS = "attachments/{libraryId}"
 
     fun editor(fileUri: String): String = editor(fileUri, editMode = false)
 
@@ -143,4 +161,6 @@ object FiberRoute {
         val mode = if (editMode) MODE_EDIT else MODE_PREVIEW
         return "editor/$encodedUri?mode=$mode"
     }
+
+    fun attachments(libraryId: String): String = "attachments/${Uri.encode(libraryId)}"
 }

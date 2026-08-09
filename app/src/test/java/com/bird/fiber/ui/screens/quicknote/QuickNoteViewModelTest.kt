@@ -340,7 +340,7 @@ class QuickNoteViewModelTest {
         )
         coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns FileResult.Success(attachment)
         coEvery {
-            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
         } returns FileResult.Success(
             MarkdownFileMeta("content://test/note.md", "note", "note.md", 0L, 0L)
         )
@@ -351,7 +351,7 @@ class QuickNoteViewModelTest {
         advanceUntilIdle()
 
         coVerify {
-            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
         }
         assertTrue(viewModel.uiState.value.attachments.isEmpty())
         viewModel.discardDraft()
@@ -393,7 +393,7 @@ class QuickNoteViewModelTest {
         coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
             FileResult.Success(attachment)
         coEvery {
-            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
         } returns FileResult.Success(
             MarkdownFileMeta("content://test/library-a/note.md", "note", "note.md", 0L, 0L)
         )
@@ -408,7 +408,7 @@ class QuickNoteViewModelTest {
             attachmentRepository.copyImage("content://source/image", targetA)
         }
         coVerify(exactly = 1) {
-            createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
+            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
         }
     }
 

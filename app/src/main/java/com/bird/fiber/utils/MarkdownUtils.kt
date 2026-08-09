@@ -1,5 +1,9 @@
 package com.bird.fiber.utils
 
+import org.commonmark.node.AbstractVisitor
+import org.commonmark.node.Image
+import org.commonmark.parser.Parser
+
 /**
  * Markdown 工具类
  *
@@ -8,6 +12,7 @@ package com.bird.fiber.utils
 object MarkdownUtils {
 
     private val markdownImagePattern = Regex("""!\[[^\]]*]\((?:<[^>]+>|[^)]+)\)""")
+    private val markdownParser = Parser.builder().build()
 
     /**
      * 预处理 Markdown 文本，开启硬换行模式
@@ -76,4 +81,17 @@ object MarkdownUtils {
     }
 
     fun containsImage(content: String): Boolean = markdownImagePattern.containsMatchIn(content)
+
+    fun extractImageDestinations(content: String): Set<String> {
+        if (content.isBlank()) return emptySet()
+
+        val destinations = linkedSetOf<String>()
+        markdownParser.parse(content).accept(object : AbstractVisitor() {
+            override fun visit(image: Image) {
+                image.destination?.takeIf { it.isNotBlank() }?.let(destinations::add)
+                visitChildren(image)
+            }
+        })
+        return destinations
+    }
 }

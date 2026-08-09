@@ -2,11 +2,43 @@ package com.bird.fiber.utils
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.bird.fiber.data.model.Attachment
+import com.bird.fiber.data.model.LibraryTarget
 
 /**
  * MarkdownUtils 单元测试
  */
 class MarkdownUtilsTest {
+
+    @Test
+    fun extractImageDestinations_parsesStandardAndAngleBracketTargets() {
+        val content = """
+            ![第一张](attachments/one.png)
+            ![第二张](<attachments/image with spaces.jpg>)
+            [普通链接](attachments/not-an-image.png)
+        """.trimIndent()
+
+        assertEquals(
+            setOf("attachments/one.png", "attachments/image with spaces.jpg"),
+            MarkdownUtils.extractImageDestinations(content)
+        )
+    }
+
+    @Test
+    fun attachmentMarkdown_wrapsPathSoSpacesRemainValid() {
+        val markdown = Attachment(
+            displayName = "image with spaces.jpg",
+            relativePath = "attachments/image with spaces.jpg",
+            uri = "content://test/image",
+            libraryTarget = LibraryTarget("library", "content://test/library")
+        ).toMarkdown()
+
+        assertEquals("![图片](<attachments/image with spaces.jpg>)", markdown)
+        assertEquals(
+            setOf("attachments/image with spaces.jpg"),
+            MarkdownUtils.extractImageDestinations(markdown)
+        )
+    }
 
     // ==================== preprocessMarkdownForHardBreaks 测试 ====================
 

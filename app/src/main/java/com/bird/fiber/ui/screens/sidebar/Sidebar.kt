@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ fun Sidebar(
     onLibrarySelected: (String) -> Unit,
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit,
+    onManageAttachments: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SidebarViewModel = hiltViewModel()
@@ -48,6 +50,7 @@ fun Sidebar(
             onLibrarySelected = onLibrarySelected,
             onAddLibrary = onAddLibrary,
             onSettingsClick = onSettingsClick,
+            onManageAttachments = onManageAttachments,
             viewModel = viewModel
         )
     }
@@ -64,6 +67,7 @@ fun SidebarContent(
     onLibrarySelected: (String) -> Unit,
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    onManageAttachments: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
@@ -86,7 +90,8 @@ fun SidebarContent(
                 },
                 onDeleteClick = { library ->
                     viewModel.deleteLibrary(library)
-                }
+                },
+                onManageAttachments = onManageAttachments
             )
         } else {
             // 空状态
@@ -155,7 +160,8 @@ private fun LibraryList(
     libraries: List<LibraryEntity>,
     selectedLibraryId: String?,
     onLibraryClick: (String) -> Unit,
-    onDeleteClick: (LibraryEntity) -> Unit
+    onDeleteClick: (LibraryEntity) -> Unit,
+    onManageAttachments: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -167,7 +173,8 @@ private fun LibraryList(
                 library = library,
                 isSelected = library.id == selectedLibraryId,
                 onClick = { onLibraryClick(library.id) },
-                onDeleteClick = { onDeleteClick(library) }
+                onDeleteClick = { onDeleteClick(library) },
+                onManageAttachments = { onManageAttachments(library.id) }
             )
         }
     }
@@ -182,7 +189,8 @@ private fun LibraryListItem(
     library: LibraryEntity,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onManageAttachments: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -235,6 +243,16 @@ private fun LibraryListItem(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false }
             ) {
+                DropdownMenuItem(
+                    text = { Text("管理附件") },
+                    onClick = {
+                        showMenu = false
+                        onManageAttachments()
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("删除") },
                     onClick = {

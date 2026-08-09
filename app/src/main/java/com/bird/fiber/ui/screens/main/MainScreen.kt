@@ -43,6 +43,7 @@ fun MainScreenContainer(
     onAddLibrary: () -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    onManageAttachments: (String) -> Unit = {},
     topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     viewModel: MainScreenViewModel = hiltViewModel(),
@@ -68,6 +69,7 @@ fun MainScreenContainer(
         onAddLibrary = onAddLibrary,
         onSearchClick = onSearchClick,
         onSettingsClick = onSettingsClick,
+        onManageAttachments = onManageAttachments,
         topBarModifier = topBarModifier,
         onLibrarySelected = { libraryId ->
             viewModel.onLibrarySelected(libraryId)
@@ -99,6 +101,7 @@ private fun MainScreenRoute(
     onAddLibrary: () -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onManageAttachments: (String) -> Unit,
     topBarModifier: Modifier,
     onLibrarySelected: (String) -> Unit,
     onOpenDrawer: () -> Unit,
@@ -125,6 +128,7 @@ private fun MainScreenRoute(
                 onLibrarySelected = onLibrarySelected,
                 onAddLibrary = onAddLibrary,
                 onSettingsClick = onSettingsClick,
+                onManageAttachments = onManageAttachments,
                 shouldComposeContent = shouldComposeDrawer
             )
         }
@@ -214,6 +218,7 @@ private fun MainDrawerContent(
     onLibrarySelected: (String) -> Unit,
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit,
+    onManageAttachments: (String) -> Unit,
     shouldComposeContent: Boolean
 ) {
     ModalDrawerSheet(
@@ -225,7 +230,8 @@ private fun MainDrawerContent(
                 selectedLibraryId = selectedLibraryId,
                 onLibrarySelected = onLibrarySelected,
                 onAddLibrary = onAddLibrary,
-                onSettingsClick = onSettingsClick
+                onSettingsClick = onSettingsClick,
+                onManageAttachments = onManageAttachments
             )
         } else {
             Spacer(modifier = Modifier.fillMaxSize())
