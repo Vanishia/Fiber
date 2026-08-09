@@ -19,7 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,8 +42,10 @@ internal fun EditorEditPane(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val density = LocalDensity.current
     var associationMenuExpanded by remember { mutableStateOf(false) }
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
+    var cursorBounds by remember { mutableStateOf(Rect.Zero) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onImageSelected(it.toString()) }
     }
@@ -65,6 +70,14 @@ internal fun EditorEditPane(
                 fontSize = MaterialTheme.typography.bodyLarge.fontSize
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            onTextLayout = { layoutResult ->
+                val caret = value.selection.start.coerceIn(0, value.text.length)
+                val rect = layoutResult.getCursorRect(caret)
+                val topInsetPx = with(density) { topContentInset.toPx() }
+                cursorBounds = rect.translate(
+                    Offset(x = 0f, y = topInsetPx - scrollState.value)
+                )
+            },
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier
@@ -78,6 +91,7 @@ internal fun EditorEditPane(
 
         AssociationMenu(
             expanded = associationMenuExpanded,
+            anchorBounds = cursorBounds,
             onDismiss = { associationMenuExpanded = false },
             onImageClick = {
                 associationTriggerIndex?.let { index ->

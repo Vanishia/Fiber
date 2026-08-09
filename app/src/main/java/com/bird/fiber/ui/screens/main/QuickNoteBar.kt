@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -32,8 +34,6 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,10 +46,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.ui.components.AssociationMenu
@@ -69,10 +75,13 @@ fun QuickNoteBar(
     onDismissError: () -> Unit,
     onSaveClick: () -> Unit
 ) {
+    val density = LocalDensity.current
     var isInputFocused by remember { mutableStateOf(false) }
     var value by remember { mutableStateOf(TextFieldValue(content)) }
     var associationMenuExpanded by remember { mutableStateOf(false) }
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
+    var cursorBounds by remember { mutableStateOf(Rect.Zero) }
+    var inputSize by remember { mutableStateOf(IntSize.Zero) }
     val isContentEmpty = content.isBlank() && attachments.isEmpty()
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onImageSelected(it.toString()) }
@@ -122,29 +131,80 @@ fun QuickNoteBar(
                 )
                 .padding(horizontal = 12.dp)
         ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { newValue ->
-                    value = newValue
-                    onContentChange(newValue.text)
-                    associationTriggerIndex = findAssociationTrigger(newValue)
-                    associationMenuExpanded = associationTriggerIndex != null
-                },
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    width = if (isInputFocused) 2.dp else 1.dp,
+                    color = if (isInputFocused) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onFocusChanged { isInputFocused = it.isFocused },
-                placeholder = { Text("快速记录…") },
-                shape = RoundedCornerShape(16.dp),
-                minLines = if (isInputFocused) 3 else 1,
-                maxLines = 6,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    .onSizeChanged { inputSize = it }
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = { newValue ->
+                        value = newValue
+                        onContentChange(newValue.text)
+                        associationTriggerIndex = findAssociationTrigger(newValue)
+                        associationMenuExpanded = associationTriggerIndex != null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { isInputFocused = it.isFocused }
+                        .padding(
+                            start = 16.dp,
+                            top = 16.dp,
+                            end = 52.dp,
+                            bottom = 16.dp
+                        ),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    minLines = if (isInputFocused) 3 else 1,
+                    maxLines = 6,
+                    onTextLayout = { layoutResult ->
+                        val caret = value.selection.start.coerceIn(0, value.text.length)
+                        val contentInsetPx = with(density) { 16.dp.toPx() }
+                        val measuredBounds = layoutResult.getCursorRect(caret).translate(
+                            Offset(x = contentInsetPx, y = contentInsetPx)
+                        )
+                        val visibleBottom = if (inputSize.height > 0) {
+                            measuredBounds.bottom.coerceAtMost(inputSize.height.toFloat())
+                        } else {
+                            measuredBounds.bottom
+                        }
+                        cursorBounds = measuredBounds.translate(
+                            Offset(
+                                x = 0f,
+                                y = visibleBottom - measuredBounds.bottom
+                            )
+                        )
+                    },
+                    decorationBox = { innerTextField ->
+                        Box {
+                            if (value.text.isEmpty()) {
+                                Text(
+                                    text = "快速记录…",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
                 )
-            )
+            }
 
             AssociationMenu(
                 expanded = associationMenuExpanded,
+                anchorBounds = cursorBounds,
                 onDismiss = { associationMenuExpanded = false },
                 onImageClick = {
                     associationTriggerIndex?.let { index ->

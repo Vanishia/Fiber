@@ -2,7 +2,6 @@ package com.bird.fiber.ui.screens.editor
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -26,10 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.bird.fiber.ui.theme.ErrorDark
-import com.bird.fiber.ui.theme.ErrorLight
-import com.bird.fiber.ui.theme.SuccessDark
-import com.bird.fiber.ui.theme.SuccessLight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,10 +116,6 @@ fun EditorScreen(
     }
 
     if (showUnsavedDialog) {
-        val isDarkTheme = isSystemInDarkTheme()
-        val successColor = if (isDarkTheme) SuccessDark else SuccessLight
-        val errorColor = if (isDarkTheme) ErrorDark else ErrorLight
-
         UnsavedChangesDialog(
             onDismiss = {
                 showUnsavedDialog = false
@@ -143,9 +134,7 @@ fun EditorScreen(
                     }
                     onClose()
                 }
-            },
-            successColor = successColor,
-            errorColor = errorColor
+            }
         )
     }
 }
