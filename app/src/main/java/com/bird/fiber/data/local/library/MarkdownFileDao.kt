@@ -169,11 +169,14 @@ interface MarkdownFileDao {
     @Query("SELECT uri FROM markdown_files WHERE library_id = :libraryId AND is_deleted = 0")
     suspend fun getAllUrisByLibrary(libraryId: String): List<String>
 
-    /**
-     * 获取指定库的所有文件（用于同步对比）
-     */
-    @Query("SELECT * FROM markdown_files WHERE library_id = :libraryId AND is_deleted = 0")
-    suspend fun getAllByLibrary(libraryId: String): List<MarkdownFileEntity>
+    @Query("""
+        SELECT uri, last_modified,
+               CASE WHEN content_preview = '' THEN 0 ELSE 1 END AS has_preview,
+               CASE WHEN content_text = '' THEN 0 ELSE 1 END AS has_search_content
+        FROM markdown_files
+        WHERE library_id = :libraryId AND is_deleted = 0
+    """)
+    suspend fun getIndexSnapshotsByLibrary(libraryId: String): List<MarkdownIndexSnapshot>
 
     @Transaction
     suspend fun replaceSync(deletedUris: List<String>, filesToUpsert: List<MarkdownFileEntity>) {

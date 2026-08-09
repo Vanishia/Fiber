@@ -137,6 +137,36 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun onContentChange_inEditMode_doesNotRenderPreview() = runTest {
+        viewModel.setInitialPreviewMode(false)
+        viewModel.onContentChange("编辑中的正文")
+        advanceUntilIdle()
+
+        verify(exactly = 0) { renderMarkdownUseCase.render(any(), any()) }
+    }
+
+    @Test
+    fun rapidPreviewInput_rendersOnlyLatestDebouncedContent() = runTest {
+        val fileUri = "content://test/file.md"
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("")
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        clearMocks(renderMarkdownUseCase)
+        every { renderMarkdownUseCase.render(any(), any()) } returns mockk<Spanned>(relaxed = true)
+
+        viewModel.onContentChange("第一版")
+        advanceTimeBy(200)
+        viewModel.onContentChange("最终版本")
+        advanceTimeBy(399)
+        verify(exactly = 0) { renderMarkdownUseCase.render(any(), any()) }
+        advanceTimeBy(1)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { renderMarkdownUseCase.render("最终版本", fileUri) }
+        verify(exactly = 0) { renderMarkdownUseCase.render("第一版", fileUri) }
+    }
+
+    @Test
     fun addImage_insertsMarkdownAtCurrentSelection() = runTest {
         val fileUri = "content://test/file.md"
         coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("前后")

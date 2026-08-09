@@ -137,6 +137,13 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "library_name") val libraryName: String?
 )
 
+data class MarkdownIndexSnapshot(
+    @ColumnInfo(name = "uri") val uri: String,
+    @ColumnInfo(name = "last_modified") val lastModified: Long,
+    @ColumnInfo(name = "has_preview") val hasPreview: Boolean,
+    @ColumnInfo(name = "has_search_content") val hasSearchContent: Boolean
+)
+
 fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
     return MarkdownFileMeta(
         uri = uri,

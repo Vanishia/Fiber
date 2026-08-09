@@ -14,12 +14,13 @@ import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -70,13 +71,19 @@ class EditorViewModel : ViewModel {
     private var originalContent: String = ""  // 保存原始内容，用于判断是否有修改
     private val pendingAttachmentUris = mutableSetOf<String>()
 
-    private val renderRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val renderRequests = MutableStateFlow<RenderRequest?>(null)
 
     init {
         viewModelScope.launch {
             renderRequests
-                .debounce(400)
-                .collect { content -> performRender(content) }
+                .debounce { request -> if (request == null || request.immediate) 0L else RENDER_DEBOUNCE_MS }
+                .collectLatest { request ->
+                    if (request == null) {
+                        _renderState.value = EditorRenderState()
+                    } else {
+                        performRender(request)
+                    }
+                }
         }
     }
 
@@ -103,8 +110,8 @@ class EditorViewModel : ViewModel {
                         textValue = TextFieldValue(result.data, TextRange(result.data.length)),
                         fileName = fileName
                     )
-                    // 初始加载直接渲染，不经过 debounce，避免启动时空白延迟
-                    performRender(result.data)
+                    // 预览模式首帧立即渲染，编辑模式不保留渲染树。
+                    requestRender(result.data, immediate = true)
                 }
                 is com.bird.fiber.data.model.FileResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -128,8 +135,10 @@ class EditorViewModel : ViewModel {
 
     fun onTextValueChange(newValue: TextFieldValue) {
         _uiState.value = _uiState.value.copy(textValue = newValue)
-        // 打字期间的渲染经过 debounce，避免频繁解析大文件
-        renderMarkdown(newValue.text)
+        // 只有预览模式需要渲染，编辑模式不常驻完整 Spanned。
+        if (_uiState.value.isPreviewMode) {
+            requestRender(newValue.text)
+        }
     }
 
     fun addImage(sourceUri: String) {
@@ -149,7 +158,9 @@ class EditorViewModel : ViewModel {
                         textValue = TextFieldValue(updatedText, TextRange(caret)),
                         isAddingImage = false
                     )
-                    renderMarkdown(updatedText)
+                    if (_uiState.value.isPreviewMode) {
+                        requestRender(updatedText)
+                    }
                 }
                 is com.bird.fiber.data.model.FileResult.Error -> {
                     _uiState.value = _uiState.value.copy(
@@ -197,7 +208,13 @@ class EditorViewModel : ViewModel {
      * 切换预览模式
      */
     fun togglePreviewMode() {
-        _uiState.value = _uiState.value.copy(isPreviewMode = !_uiState.value.isPreviewMode)
+        val nextPreviewMode = !_uiState.value.isPreviewMode
+        _uiState.value = _uiState.value.copy(isPreviewMode = nextPreviewMode)
+        if (nextPreviewMode) {
+            requestRender(_uiState.value.content, immediate = true)
+        } else {
+            renderRequests.value = null
+        }
     }
 
     /**
@@ -231,14 +248,25 @@ class EditorViewModel : ViewModel {
      */
     fun setInitialPreviewMode(isPreview: Boolean) {
         _uiState.value = _uiState.value.copy(isPreviewMode = isPreview)
+        if (isPreview) {
+            requestRender(_uiState.value.content, immediate = true)
+        } else {
+            renderRequests.value = null
+        }
     }
 
-    private fun renderMarkdown(content: String) {
-        renderRequests.tryEmit(content)
+    private fun requestRender(content: String, immediate: Boolean = false) {
+        if (!_uiState.value.isPreviewMode) return
+        renderRequests.value = RenderRequest(
+            content = content,
+            fileUri = currentFileUri,
+            immediate = immediate,
+            sequence = nextRenderSequence++
+        )
     }
 
-    private suspend fun performRender(content: String) {
-        if (content.isBlank()) {
+    private suspend fun performRender(request: RenderRequest) {
+        if (request.content.isBlank()) {
             _renderState.value = EditorRenderState()
             return
         }
@@ -246,14 +274,29 @@ class EditorViewModel : ViewModel {
         _renderState.value = _renderState.value.copy(isRendering = true)
         try {
             val rendered = withContext(renderDispatcher) {
-                renderMarkdownUseCase.render(content, currentFileUri)
+                renderMarkdownUseCase.render(request.content, request.fileUri)
             }
             _renderState.value = EditorRenderState(
                 renderedMarkdown = rendered,
                 isRendering = false
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             _renderState.value = _renderState.value.copy(isRendering = false)
         }
+    }
+
+    private var nextRenderSequence = 0L
+
+    private data class RenderRequest(
+        val content: String,
+        val fileUri: String?,
+        val immediate: Boolean,
+        val sequence: Long
+    )
+
+    private companion object {
+        const val RENDER_DEBOUNCE_MS = 400L
     }
 }

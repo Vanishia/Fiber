@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.MarkdownFileEntity
+import com.bird.fiber.data.local.library.MarkdownIndexSnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -88,6 +89,19 @@ class FileIndexerTest {
     }
 
     @Test
+    fun updateFileAfterSave_usesProvidedFileSizeWithoutRecomputingBytes() = runTest {
+        val updatedEntity = slot<MarkdownFileEntity>()
+        val existing = entityFile(uri = "file-uri", preview = "old-preview", lastModified = 100L, size = 10L)
+        coEvery { markdownFileDao.getFileByUri("file-uri") } returns existing
+        every { previewReader.readFromContent("正文") } returns "preview"
+        coEvery { writer.update(capture(updatedEntity)) } returns Unit
+
+        fileIndexer.updateFileAfterSave("file-uri", "正文", size = 2048L)
+
+        assertEquals(2048L, updatedEntity.captured.size)
+    }
+
+    @Test
     fun syncLibrary_newAndDeletedFiles_writesExpectedEntities() = runTest {
         var capturedDeletedUris: List<String>? = null
         var capturedUpsertFiles: List<MarkdownFileEntity>? = null
@@ -99,19 +113,22 @@ class FileIndexerTest {
             scannedFile(uri = "same-uri", lastModified = 100L, size = 10L)
         )
         val cachedFiles = listOf(
-            entityFile(uri = "same-uri", preview = "ready", lastModified = 100L, size = 10L),
-            entityFile(uri = "deleted-uri", preview = "old", lastModified = 50L, size = 5L)
+            snapshotFile(uri = "same-uri", lastModified = 100L),
+            snapshotFile(uri = "deleted-uri", lastModified = 50L)
         )
 
         every {
             scanner.scan(contentResolver, "folder-uri", "library-1")
         } returns scannedFiles
-        coEvery { markdownFileDao.getAllByLibrary("library-1") } returns cachedFiles
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-1") } returns cachedFiles
         every { contentReader.read(contentResolver, Uri.parse("new-uri")) } returns "# new"
         every { previewReader.readFromContent("# new") } returns "new-preview"
-        coEvery { writer.applySync(any(), any()) } answers {
+        coEvery { writer.upsertBatch(any()) } answers {
+            capturedUpsertFiles = arg(0)
+            Unit
+        }
+        coEvery { writer.deleteMissing(any()) } answers {
             capturedDeletedUris = arg(0)
-            capturedUpsertFiles = arg(1)
             Unit
         }
 
@@ -126,7 +143,8 @@ class FileIndexerTest {
         assertEquals(0, result.updated)
         assertEquals(1, result.deleted)
 
-        coVerify(exactly = 1) { writer.applySync(any(), any()) }
+        coVerify(exactly = 1) { writer.upsertBatch(any()) }
+        coVerify(exactly = 1) { writer.deleteMissing(any()) }
         assertEquals(listOf("deleted-uri"), capturedDeletedUris)
         assertEquals(1, capturedUpsertFiles?.size)
         assertEquals("new-uri", capturedUpsertFiles?.single()?.uri)
@@ -146,18 +164,21 @@ class FileIndexerTest {
             scannedFile(uri = "uri-1", lastModified = 100L, size = 10L)
         )
         val cachedFiles = listOf(
-            entityFile(uri = "uri-1", preview = "", lastModified = 100L, size = 10L)
+            snapshotFile(uri = "uri-1", lastModified = 100L, hasPreview = false)
         )
 
         every {
             scanner.scan(contentResolver, "folder-uri", "library-1")
         } returns scannedFiles
-        coEvery { markdownFileDao.getAllByLibrary("library-1") } returns cachedFiles
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-1") } returns cachedFiles
         every { contentReader.read(contentResolver, Uri.parse("uri-1")) } returns "# title"
         every { previewReader.readFromContent("# title") } returns "filled-preview"
-        coEvery { writer.applySync(any(), any()) } answers {
+        coEvery { writer.upsertBatch(any()) } answers {
+            capturedUpsertFiles = arg(0)
+            Unit
+        }
+        coEvery { writer.deleteMissing(any()) } answers {
             capturedDeletedUris = arg(0)
-            capturedUpsertFiles = arg(1)
             Unit
         }
 
@@ -174,7 +195,8 @@ class FileIndexerTest {
         assertEquals(0, result.deleted)
         assertEquals(listOf(1 to 1), progress)
 
-        coVerify(exactly = 1) { writer.applySync(any(), any()) }
+        coVerify(exactly = 1) { writer.upsertBatch(any()) }
+        coVerify(exactly = 1) { writer.deleteMissing(any()) }
         assertEquals(emptyList<String>(), capturedDeletedUris)
         assertEquals(1, capturedUpsertFiles?.size)
         assertEquals("filled-preview", capturedUpsertFiles?.single()?.contentPreview)
@@ -202,11 +224,11 @@ class FileIndexerTest {
     fun syncLibrary_massDeletionGuard_returnsFolderUnavailableAndSkipsWrite() = runTest {
         val scannedFiles = emptyList<ScannedFile>()
         val cachedFiles = (1..10).map { index ->
-            entityFile(uri = "uri-$index", preview = "old", lastModified = index.toLong(), size = 10L)
+            snapshotFile(uri = "uri-$index", lastModified = index.toLong())
         }
 
         coEvery { scanner.scan(contentResolver, "folder-uri", "library-1") } returns scannedFiles
-        coEvery { markdownFileDao.getAllByLibrary("library-1") } returns cachedFiles
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-1") } returns cachedFiles
 
         val result = fileIndexer.syncLibrary(
             contentResolver = contentResolver,
@@ -217,7 +239,35 @@ class FileIndexerTest {
         require(result is SyncResult.Failure)
         require(result.error is SyncFailure.FolderUnavailable)
         assertEquals("folder-uri", result.error.folderUri)
-        coVerify(exactly = 0) { writer.applySync(any(), any()) }
+        coVerify(exactly = 0) { writer.upsertBatch(any()) }
+        coVerify(exactly = 0) { writer.deleteMissing(any()) }
+    }
+
+    @Test
+    fun syncLibrary_manyChangedFiles_writesBoundedBatches() = runTest {
+        mockkStatic(Uri::class)
+        every { Uri.parse(any()) } returns mockk(relaxed = true)
+        val scannedFiles = (1..120).map { index ->
+            scannedFile(uri = "uri-$index", lastModified = index.toLong(), size = 10L)
+        }
+        every { scanner.scan(contentResolver, "folder-uri", "library-1") } returns scannedFiles
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-1") } returns emptyList()
+        every { contentReader.read(contentResolver, any()) } returns "content"
+        every { previewReader.readFromContent("content") } returns "preview"
+        val batchSizes = mutableListOf<Int>()
+        coEvery { writer.upsertBatch(any()) } answers {
+            batchSizes += arg<List<MarkdownFileEntity>>(0).size
+        }
+
+        val result = fileIndexer.syncLibrary(
+            contentResolver = contentResolver,
+            libraryId = "library-1",
+            folderUri = "folder-uri"
+        )
+
+        require(result is SyncResult.Success)
+        assertEquals(listOf(50, 50, 20), batchSizes)
+        assertEquals(120, result.inserted)
     }
 
     private fun entityFile(
@@ -249,6 +299,18 @@ class FileIndexerTest {
         lastModified = lastModified,
         size = size,
         libraryId = "library-1"
+    )
+
+    private fun snapshotFile(
+        uri: String,
+        lastModified: Long,
+        hasPreview: Boolean = true,
+        hasSearchContent: Boolean = true
+    ) = MarkdownIndexSnapshot(
+        uri = uri,
+        lastModified = lastModified,
+        hasPreview = hasPreview,
+        hasSearchContent = hasSearchContent
     )
 
     private fun mockUriParse(uriString: String) {

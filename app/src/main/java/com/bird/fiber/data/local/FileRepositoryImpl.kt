@@ -134,7 +134,8 @@ class FileRepositoryImpl @Inject constructor(
             outputStream.flush()
         } ?: return@ioFileResult FileResult.Error(FileError.NotFound(fileUri))
 
-        fileIndexer.updateFileAfterSave(fileUri, content)
+        val actualSize = queryFileMetadata(Uri.parse(fileUri), "").size
+        fileIndexer.updateFileAfterSave(fileUri, content, actualSize)
         FileResult.Success(Unit)
     }
 

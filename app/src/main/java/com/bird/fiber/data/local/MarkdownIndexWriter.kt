@@ -6,11 +6,16 @@ import com.bird.fiber.data.local.library.MarkdownFileEntity
 class MarkdownIndexWriter(
     private val markdownFileDao: MarkdownFileDao
 ) {
-    suspend fun applySync(deletedUris: List<String>, filesToUpsert: List<MarkdownFileEntity>) {
-        markdownFileDao.replaceSync(
-            deletedUris = deletedUris,
-            filesToUpsert = filesToUpsert
-        )
+    suspend fun upsertBatch(filesToUpsert: List<MarkdownFileEntity>) {
+        if (filesToUpsert.isNotEmpty()) {
+            markdownFileDao.insertAll(filesToUpsert)
+        }
+    }
+
+    suspend fun deleteMissing(deletedUris: List<String>) {
+        if (deletedUris.isNotEmpty()) {
+            markdownFileDao.deleteByUris(deletedUris)
+        }
     }
 
     suspend fun insert(entity: MarkdownFileEntity) {

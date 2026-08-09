@@ -3,6 +3,7 @@ package com.bird.fiber.data.local
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.bird.fiber.data.local.library.MarkdownIndexSnapshot
 
 class MarkdownSyncPlannerTest {
 
@@ -24,7 +25,7 @@ class MarkdownSyncPlannerTest {
     @Test
     fun plan_modifiedFile_marksUpdate() {
         val systemFiles = listOf(scannedFile(uri = "uri-1", lastModified = 200L))
-        val cachedFiles = listOf(entityFile(uri = "uri-1", lastModified = 100L, preview = "old"))
+        val cachedFiles = listOf(snapshotFile(uri = "uri-1", lastModified = 100L))
 
         val plan = planner.plan(systemFiles, cachedFiles)
 
@@ -36,7 +37,7 @@ class MarkdownSyncPlannerTest {
     @Test
     fun plan_missingPreview_marksUpdate() {
         val systemFiles = listOf(scannedFile(uri = "uri-1", lastModified = 100L))
-        val cachedFiles = listOf(entityFile(uri = "uri-1", lastModified = 100L, preview = ""))
+        val cachedFiles = listOf(snapshotFile(uri = "uri-1", lastModified = 100L, hasPreview = false))
 
         val plan = planner.plan(systemFiles, cachedFiles)
 
@@ -49,11 +50,10 @@ class MarkdownSyncPlannerTest {
     fun plan_missingSearchContent_marksUpdate() {
         val systemFiles = listOf(scannedFile(uri = "uri-1", lastModified = 100L))
         val cachedFiles = listOf(
-            entityFile(
+            snapshotFile(
                 uri = "uri-1",
                 lastModified = 100L,
-                preview = "ready",
-                contentText = ""
+                hasSearchContent = false
             )
         )
 
@@ -66,7 +66,7 @@ class MarkdownSyncPlannerTest {
 
     @Test
     fun plan_missingSystemFile_marksDelete() {
-        val cachedFiles = listOf(entityFile(uri = "uri-1", lastModified = 100L))
+        val cachedFiles = listOf(snapshotFile(uri = "uri-1", lastModified = 100L))
 
         val plan = planner.plan(emptyList(), cachedFiles)
 
@@ -78,7 +78,7 @@ class MarkdownSyncPlannerTest {
     @Test
     fun plan_unchangedFile_keepsPlanEmpty() {
         val systemFiles = listOf(scannedFile(uri = "uri-1", lastModified = 100L))
-        val cachedFiles = listOf(entityFile(uri = "uri-1", lastModified = 100L, preview = "ready"))
+        val cachedFiles = listOf(snapshotFile(uri = "uri-1", lastModified = 100L))
 
         val plan = planner.plan(systemFiles, cachedFiles)
 
@@ -100,20 +100,15 @@ class MarkdownSyncPlannerTest {
         libraryId = "library-1"
     )
 
-    private fun entityFile(
+    private fun snapshotFile(
         uri: String,
         lastModified: Long,
-        preview: String = "preview",
-        contentText: String = "content"
-    ) = com.bird.fiber.data.local.library.MarkdownFileEntity(
+        hasPreview: Boolean = true,
+        hasSearchContent: Boolean = true
+    ) = MarkdownIndexSnapshot(
         uri = uri,
-        name = uri,
-        path = "$uri.md",
         lastModified = lastModified,
-        size = 1L,
-        libraryId = "library-1",
-        contentPreview = preview,
-        contentText = contentText,
-        isDeleted = 0
+        hasPreview = hasPreview,
+        hasSearchContent = hasSearchContent
     )
 }

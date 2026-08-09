@@ -51,7 +51,7 @@ class FileIndexer internal constructor(
                     folderUri = folderUri,
                     libraryId = libraryId
                 )
-                val filesInDatabase = markdownFileDao.getAllByLibrary(libraryId)
+                val filesInDatabase = markdownFileDao.getIndexSnapshotsByLibrary(libraryId)
 
                 Timber.d(
                     "FileIndexer: scanned=%s, cached=%s, library=%s",
@@ -61,20 +61,6 @@ class FileIndexer internal constructor(
                 )
 
                 val plan = syncPlanner.plan(filesFromSystem, filesInDatabase)
-                val filesToUpsert = ArrayList<MarkdownFileEntity>(plan.entriesToUpsert.size)
-
-                plan.entriesToUpsert.forEachIndexed { index, entry ->
-                    val content = contentReader.read(
-                        contentResolver = contentResolver,
-                        uri = Uri.parse(entry.file.uri)
-                    )
-                    filesToUpsert += entry.file.toEntity(
-                        contentPreview = previewReader.readFromContent(content),
-                        contentText = content,
-                        hasImage = MarkdownUtils.containsImage(content)
-                    )
-                    onProgress?.invoke(index + 1, plan.entriesToUpsert.size)
-                }
 
                 if (shouldGuardMassDeletion(filesFromSystem, filesInDatabase, plan.deletedUris)) {
                     Timber.w(
@@ -92,7 +78,24 @@ class FileIndexer internal constructor(
                     )
                 }
 
-                writer.applySync(plan.deletedUris, filesToUpsert)
+                var processedCount = 0
+                plan.entriesToUpsert.chunked(SYNC_BATCH_SIZE).forEach { batch ->
+                    val filesToUpsert = batch.map { entry ->
+                        val content = contentReader.read(
+                            contentResolver = contentResolver,
+                            uri = Uri.parse(entry.file.uri)
+                        )
+                        processedCount++
+                        onProgress?.invoke(processedCount, plan.entriesToUpsert.size)
+                        entry.file.toEntity(
+                            contentPreview = previewReader.readFromContent(content),
+                            contentText = content,
+                            hasImage = MarkdownUtils.containsImage(content)
+                        )
+                    }
+                    writer.upsertBatch(filesToUpsert)
+                }
+                writer.deleteMissing(plan.deletedUris)
 
                 Timber.d(
                     "FileIndexer: sync done inserted=%s updated=%s deleted=%s",
@@ -158,7 +161,8 @@ class FileIndexer internal constructor(
 
     suspend fun updateFileAfterSave(
         fileUri: String,
-        content: String
+        content: String,
+        size: Long? = null
     ) = withContext(Dispatchers.IO) {
         mutex.withLock {
             try {
@@ -174,7 +178,7 @@ class FileIndexer internal constructor(
                         contentText = content,
                         hasImage = MarkdownUtils.containsImage(content),
                         lastModified = System.currentTimeMillis(),
-                        size = content.toByteArray().size.toLong()
+                        size = size ?: content.toByteArray().size.toLong()
                     )
                 )
                 Timber.d("FileIndexer: updated file after save=%s", fileUri)
@@ -186,7 +190,7 @@ class FileIndexer internal constructor(
 
     private fun shouldGuardMassDeletion(
         filesFromSystem: List<ScannedFile>,
-        filesInDatabase: List<MarkdownFileEntity>,
+        filesInDatabase: List<com.bird.fiber.data.local.library.MarkdownIndexSnapshot>,
         deletedUris: List<String>
     ): Boolean {
         if (filesInDatabase.size < MASS_DELETION_GUARD_MIN_EXISTING) {
@@ -209,6 +213,7 @@ class FileIndexer internal constructor(
 
     companion object {
         private const val MASS_DELETION_GUARD_MIN_EXISTING = 10
+        internal const val SYNC_BATCH_SIZE = 50
     }
 }
 

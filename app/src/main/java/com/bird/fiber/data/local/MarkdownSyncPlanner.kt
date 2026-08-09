@@ -1,11 +1,11 @@
 package com.bird.fiber.data.local
 
-import com.bird.fiber.data.local.library.MarkdownFileEntity
+import com.bird.fiber.data.local.library.MarkdownIndexSnapshot
 
 class MarkdownSyncPlanner {
     fun plan(
         filesFromSystem: List<ScannedFile>,
-        filesInDatabase: List<MarkdownFileEntity>
+        filesInDatabase: List<MarkdownIndexSnapshot>
     ): SyncPlan {
         val databaseMap = filesInDatabase.associateBy { it.uri }
         val systemUris = filesFromSystem.mapTo(mutableSetOf()) { it.uri }
@@ -27,12 +27,12 @@ class MarkdownSyncPlanner {
                     entriesToUpsert += PlannedUpsert(systemFile, UpsertReason.MODIFIED)
                 }
 
-                cachedFile.contentPreview.isEmpty() -> {
+                !cachedFile.hasPreview -> {
                     updatedCount++
                     entriesToUpsert += PlannedUpsert(systemFile, UpsertReason.MISSING_PREVIEW)
                 }
 
-                cachedFile.contentText.isEmpty() -> {
+                !cachedFile.hasSearchContent -> {
                     updatedCount++
                     entriesToUpsert += PlannedUpsert(systemFile, UpsertReason.MISSING_SEARCH_CONTENT)
                 }
