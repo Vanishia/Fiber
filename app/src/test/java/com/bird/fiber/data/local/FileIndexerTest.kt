@@ -14,11 +14,22 @@ import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FileIndexerTest {
 
     @After
@@ -268,6 +279,135 @@ class FileIndexerTest {
         require(result is SyncResult.Success)
         assertEquals(listOf(50, 50, 20), batchSizes)
         assertEquals(120, result.inserted)
+    }
+
+    @Test
+    fun syncLibrary_sameAndDifferentLibrariesRemainGloballySerialAndRecordMetrics() = runTest {
+        val metrics = CopyOnWriteArrayList<IndexLockMetric>()
+        val indexer = FileIndexer(
+            markdownFileDao = markdownFileDao,
+            scanner = scanner,
+            contentReader = contentReader,
+            previewReader = previewReader,
+            syncPlanner = syncPlanner,
+            writer = writer,
+            lockMetrics = IndexLockMetrics(metrics::add)
+        )
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondStarted = CountDownLatch(1)
+        every { scanner.scan(contentResolver, "folder-a", "library-a") } answers {
+            firstStarted.countDown()
+            releaseFirst.await(5, TimeUnit.SECONDS)
+            emptyList()
+        }
+        every { scanner.scan(contentResolver, "folder-b", "library-b") } answers {
+            secondStarted.countDown()
+            emptyList()
+        }
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary(any()) } returns emptyList()
+
+        val first = launch {
+            indexer.syncLibrary(contentResolver, "library-a", "folder-a", reason = "active-library")
+        }
+        runCurrent()
+        assertTrue(firstStarted.await(2, TimeUnit.SECONDS))
+
+        val second = launch {
+            indexer.syncLibrary(contentResolver, "library-b", "folder-b", reason = "inactive-libraries")
+        }
+        runCurrent()
+        assertFalse(secondStarted.await(150, TimeUnit.MILLISECONDS))
+
+        releaseFirst.countDown()
+        first.join()
+        second.join()
+        assertTrue(secondStarted.await(2, TimeUnit.SECONDS))
+        assertEquals(setOf("active-library", "inactive-libraries"), metrics.map { it.reason }.toSet())
+        assertTrue(metrics.all { it.acquired && it.holdMillis >= 0L })
+        assertTrue(metrics.single { it.reason == "inactive-libraries" }.waitMillis >= 100L)
+    }
+
+    @Test
+    fun syncLibrary_twoTasksForSameLibraryDoNotOverlap() = runTest {
+        val indexer = FileIndexer(
+            markdownFileDao = markdownFileDao,
+            scanner = scanner,
+            contentReader = contentReader,
+            previewReader = previewReader,
+            syncPlanner = syncPlanner,
+            writer = writer
+        )
+        val callCount = AtomicInteger(0)
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondStarted = CountDownLatch(1)
+        every { scanner.scan(contentResolver, "folder-a", "library-a") } answers {
+            if (callCount.incrementAndGet() == 1) {
+                firstStarted.countDown()
+                releaseFirst.await(5, TimeUnit.SECONDS)
+            } else {
+                secondStarted.countDown()
+            }
+            emptyList()
+        }
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-a") } returns emptyList()
+
+        val first = launch { indexer.syncLibrary(contentResolver, "library-a", "folder-a", reason = "same-1") }
+        runCurrent()
+        assertTrue(firstStarted.await(2, TimeUnit.SECONDS))
+        val second = launch { indexer.syncLibrary(contentResolver, "library-a", "folder-a", reason = "same-2") }
+        runCurrent()
+        assertFalse(secondStarted.await(150, TimeUnit.MILLISECONDS))
+
+        releaseFirst.countDown()
+        first.join()
+        second.join()
+        assertTrue(secondStarted.await(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun syncLibrary_cancelledWhileWaitingDoesNotEnterProviderOrLeakLock() = runTest {
+        val metrics = CopyOnWriteArrayList<IndexLockMetric>()
+        val indexer = FileIndexer(
+            markdownFileDao = markdownFileDao,
+            scanner = scanner,
+            contentReader = contentReader,
+            previewReader = previewReader,
+            syncPlanner = syncPlanner,
+            writer = writer,
+            lockMetrics = IndexLockMetrics(metrics::add)
+        )
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        every { scanner.scan(contentResolver, "folder-a", "library-a") } answers {
+            firstStarted.countDown()
+            releaseFirst.await(5, TimeUnit.SECONDS)
+            emptyList()
+        }
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary(any()) } returns emptyList()
+
+        val first = launch {
+            indexer.syncLibrary(contentResolver, "library-a", "folder-a", reason = "active-library")
+        }
+        runCurrent()
+        assertTrue(firstStarted.await(2, TimeUnit.SECONDS))
+        val cancelled = launch {
+            indexer.syncLibrary(contentResolver, "library-b", "folder-b", reason = "cancelled-sync")
+        }
+        runCurrent()
+        Thread.sleep(100)
+        cancelled.cancelAndJoin()
+        releaseFirst.countDown()
+        first.join()
+
+        verify(exactly = 0) { scanner.scan(contentResolver, "folder-b", "library-b") }
+        val cancelledMetric = metrics.single { it.reason == "cancelled-sync" }
+        assertFalse(cancelledMetric.acquired)
+
+        every { scanner.scan(contentResolver, "folder-c", "library-c") } returns emptyList()
+        indexer.syncLibrary(contentResolver, "library-c", "folder-c", reason = "after-cancel")
+        assertTrue(metrics.any { it.reason == "after-cancel" && it.acquired })
     }
 
     private fun entityFile(

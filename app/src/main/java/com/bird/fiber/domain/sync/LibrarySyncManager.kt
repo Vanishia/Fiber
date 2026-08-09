@@ -56,7 +56,8 @@ class LibrarySyncManager @Inject constructor(
             when (val result = fileIndexer.syncLibrary(
                 contentResolver = contentResolver,
                 libraryId = newLibrary.id,
-                folderUri = folderUriString
+                folderUri = folderUriString,
+                reason = "new-library"
             )) {
                 is SyncResult.Success -> {
                     Timber.d(
@@ -93,6 +94,7 @@ class LibrarySyncManager @Inject constructor(
                 contentResolver = contentResolver,
                 libraries = libraries,
                 activeLibraryId = activeLibraryId,
+                reason = "all-libraries",
                 onProgress = onProgress
             )
 
@@ -132,6 +134,7 @@ class LibrarySyncManager @Inject constructor(
                 contentResolver = contentResolver,
                 libraries = listOf(activeLibrary),
                 activeLibraryId = activeLibrary.id,
+                reason = "active-library",
                 onProgress = onProgress
             )
 
@@ -167,6 +170,7 @@ class LibrarySyncManager @Inject constructor(
                 contentResolver = contentResolver,
                 libraries = inactiveLibraries,
                 activeLibraryId = activeLibraryId,
+                reason = "inactive-libraries",
                 onProgress = onProgress
             )
         } catch (e: Exception) {
@@ -201,6 +205,7 @@ class LibrarySyncManager @Inject constructor(
         contentResolver: ContentResolver,
         libraries: List<LibraryEntity>,
         activeLibraryId: String?,
+        reason: String,
         onProgress: ((libraryName: String, current: Int, total: Int) -> Unit)?
     ): Int {
         var activeLibraryChangedCount = 0
@@ -212,6 +217,7 @@ class LibrarySyncManager @Inject constructor(
                 contentResolver = contentResolver,
                 libraryId = library.id,
                 folderUri = folderUri,
+                reason = reason,
                 onProgress = { current, total ->
                     onProgress?.invoke(library.name, current, total)
                 }

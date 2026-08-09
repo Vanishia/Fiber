@@ -6,8 +6,8 @@ import android.provider.DocumentsContract
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.MarkdownFileEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.bird.fiber.utils.MarkdownUtils
@@ -21,7 +21,8 @@ class FileIndexer internal constructor(
     private val contentReader: MarkdownContentReader,
     private val previewReader: MarkdownPreviewReader,
     private val syncPlanner: MarkdownSyncPlanner,
-    private val writer: MarkdownIndexWriter
+    private val writer: MarkdownIndexWriter,
+    private val lockMetrics: IndexLockMetrics = TimberIndexLockMetrics
 ) {
 
     @Inject
@@ -40,9 +41,10 @@ class FileIndexer internal constructor(
         contentResolver: ContentResolver,
         libraryId: String,
         folderUri: String,
+        reason: String = "library-sync",
         onProgress: ((Int, Int) -> Unit)? = null
     ): SyncResult = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        withIndexLock(libraryId, reason) {
             Timber.d("FileIndexer: start sync library=%s", libraryId)
 
             try {
@@ -70,7 +72,7 @@ class FileIndexer internal constructor(
                         filesInDatabase.size,
                         plan.deletedUris.size
                     )
-                    return@withLock SyncResult.Failure(
+                    return@withIndexLock SyncResult.Failure(
                         SyncFailure.FolderUnavailable(
                             folderUri = folderUri,
                             reason = "Mass deletion guard triggered"
@@ -109,6 +111,8 @@ class FileIndexer internal constructor(
                     updated = plan.updatedCount,
                     deleted = plan.deletedUris.size
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: sync failed library=%s", libraryId)
                 SyncResult.Failure(e.toSyncFailure(folderUri))
@@ -122,14 +126,14 @@ class FileIndexer internal constructor(
         rootFolderUri: String,
         fileUri: String
     ): Boolean = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        withIndexLock(libraryId, "file-create-index") {
             try {
                 val scannedFile = scanner.scanSingleFile(
                     contentResolver = contentResolver,
                     libraryId = libraryId,
                     rootFolderUri = rootFolderUri,
                     fileUri = fileUri
-                ) ?: return@withLock false
+                ) ?: return@withIndexLock false
 
                 val content = contentReader.read(contentResolver, Uri.parse(scannedFile.uri))
 
@@ -141,6 +145,8 @@ class FileIndexer internal constructor(
                 )
                 Timber.d("FileIndexer: inserted file=%s", scannedFile.name)
                 true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: insert file failed uri=%s", fileUri)
                 false
@@ -149,10 +155,12 @@ class FileIndexer internal constructor(
     }
 
     suspend fun deleteFile(fileUri: String) = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        withIndexLock(null, "file-delete-index") {
             try {
                 writer.delete(fileUri)
                 Timber.d("FileIndexer: deleted file=%s", fileUri)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: delete file failed uri=%s", fileUri)
             }
@@ -164,12 +172,12 @@ class FileIndexer internal constructor(
         content: String,
         size: Long? = null
     ) = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        withIndexLock(null, "file-save-index") {
             try {
                 val existingEntity = markdownFileDao.getFileByUri(fileUri)
                 if (existingEntity == null) {
                     Timber.w("FileIndexer: update skipped, missing file=%s", fileUri)
-                    return@withContext
+                    return@withIndexLock
                 }
 
                 writer.update(
@@ -182,6 +190,8 @@ class FileIndexer internal constructor(
                     )
                 )
                 Timber.d("FileIndexer: updated file after save=%s", fileUri)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: update after save failed uri=%s", fileUri)
             }
@@ -202,6 +212,55 @@ class FileIndexer internal constructor(
         return deletedUris.size >= filesInDatabase.size
     }
 
+    private suspend fun <T> withIndexLock(
+        libraryId: String?,
+        reason: String,
+        block: suspend () -> T
+    ): T {
+        val waitStartedNanos = System.nanoTime()
+        try {
+            mutex.lock()
+        } catch (e: CancellationException) {
+            recordLockMetric(
+                IndexLockMetric(
+                    libraryId = libraryId,
+                    reason = reason,
+                    waitMillis = elapsedMillis(waitStartedNanos),
+                    holdMillis = 0L,
+                    acquired = false
+                )
+            )
+            throw e
+        }
+
+        val acquiredNanos = System.nanoTime()
+        val waitMillis = elapsedMillis(waitStartedNanos, acquiredNanos)
+        try {
+            return block()
+        } finally {
+            val holdMillis = elapsedMillis(acquiredNanos)
+            mutex.unlock()
+            recordLockMetric(
+                IndexLockMetric(
+                    libraryId = libraryId,
+                    reason = reason,
+                    waitMillis = waitMillis,
+                    holdMillis = holdMillis,
+                    acquired = true
+                )
+            )
+        }
+    }
+
+    private fun recordLockMetric(metric: IndexLockMetric) {
+        runCatching { lockMetrics.record(metric) }
+            .onFailure { Timber.w(it, "FileIndexer: failed to record lock metric") }
+    }
+
+    private fun elapsedMillis(startNanos: Long, endNanos: Long = System.nanoTime()): Long {
+        return (endNanos - startNanos).coerceAtLeast(0L) / 1_000_000L
+    }
+
     private fun Throwable.toSyncFailure(folderUri: String): SyncFailure {
         return when (this) {
             is SecurityException -> SyncFailure.PermissionLost(folderUri, this)
@@ -214,6 +273,31 @@ class FileIndexer internal constructor(
     companion object {
         private const val MASS_DELETION_GUARD_MIN_EXISTING = 10
         internal const val SYNC_BATCH_SIZE = 50
+    }
+}
+
+data class IndexLockMetric(
+    val libraryId: String?,
+    val reason: String,
+    val waitMillis: Long,
+    val holdMillis: Long,
+    val acquired: Boolean
+)
+
+fun interface IndexLockMetrics {
+    fun record(metric: IndexLockMetric)
+}
+
+private object TimberIndexLockMetrics : IndexLockMetrics {
+    override fun record(metric: IndexLockMetric) {
+        Timber.d(
+            "FileIndexer lock metric library=%s reason=%s waitMs=%s holdMs=%s acquired=%s",
+            metric.libraryId ?: "unknown",
+            metric.reason,
+            metric.waitMillis,
+            metric.holdMillis,
+            metric.acquired
+        )
     }
 }
 
