@@ -19,3 +19,9 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Markwon's image module references optional GIF and SVG decoders. Fiber uses
+# Coil for image loading and does not bundle these optional decoder libraries.
+-dontwarn com.caverock.androidsvg.SVG
+-dontwarn com.caverock.androidsvg.SVGParseException
+-dontwarn pl.droidsonroids.gif.GifDrawable

@@ -1,5 +1,6 @@
 package com.bird.fiber.ui.theme
 
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 import org.junit.Assert.assertEquals
@@ -36,9 +37,12 @@ class ColorSchemeTest {
             val dark = colorSchemeFromSeed(scheme.seedColor, darkTheme = true)
             val lightSurfaces = fiberSurfaceColors(light, darkTheme = false)
             val darkSurfaces = fiberSurfaceColors(dark, darkTheme = true)
+            val expectedLightContentCard = light.primary
+                .copy(alpha = 0.04f)
+                .compositeOver(light.surfaceContainerLowest)
 
             assertEquals(light.surfaceContainerLow, lightSurfaces.pageBackground)
-            assertEquals(light.surfaceContainerLowest, lightSurfaces.contentCard)
+            assertEquals(expectedLightContentCard, lightSurfaces.contentCard)
             assertEquals(dark.surface, darkSurfaces.pageBackground)
             assertEquals(dark.surfaceContainerLow, darkSurfaces.contentCard)
             assertEquals(lightSurfaces.pageBackground, lightSurfaces.topBar)

@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+}
+
+val releaseKeystorePropertiesFile = rootProject.file("release/keystore.properties")
+val releaseKeystoreProperties = Properties().apply {
+    if (releaseKeystorePropertiesFile.isFile) {
+        releaseKeystorePropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -16,16 +25,40 @@ android {
         applicationId = "com.bird.fiber"
         minSdk = 27
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseKeystorePropertiesFile.isFile) {
+            create("release") {
+                storeFile = releaseKeystorePropertiesFile.parentFile.resolve(
+                    requireNotNull(releaseKeystoreProperties.getProperty("storeFile")) {
+                        "Missing storeFile in ${releaseKeystorePropertiesFile.path}"
+                    }
+                )
+                storePassword = requireNotNull(releaseKeystoreProperties.getProperty("storePassword")) {
+                    "Missing storePassword in ${releaseKeystorePropertiesFile.path}"
+                }
+                keyAlias = requireNotNull(releaseKeystoreProperties.getProperty("keyAlias")) {
+                    "Missing keyAlias in ${releaseKeystorePropertiesFile.path}"
+                }
+                keyPassword = requireNotNull(releaseKeystoreProperties.getProperty("keyPassword")) {
+                    "Missing keyPassword in ${releaseKeystorePropertiesFile.path}"
+                }
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            if (releaseKeystorePropertiesFile.isFile) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

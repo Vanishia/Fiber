@@ -11,6 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 
@@ -62,13 +63,17 @@ internal fun fiberSurfaceColors(
     } else {
         colorScheme.surfaceContainerLow
     }
+    val contentCard = if (darkTheme) {
+        colorScheme.surfaceContainerLow
+    } else {
+        // Keep day cards close to white while adding a barely-there theme tint.
+        colorScheme.primary
+            .copy(alpha = 0.04f)
+            .compositeOver(colorScheme.surfaceContainerLowest)
+    }
     return FiberSurfaceColors(
         pageBackground = pageBackground,
-        contentCard = if (darkTheme) {
-            colorScheme.surfaceContainerLow
-        } else {
-            colorScheme.surfaceContainerLowest
-        },
+        contentCard = contentCard,
         topBar = pageBackground,
         searchInput = colorScheme.surfaceContainerHigh
     )
