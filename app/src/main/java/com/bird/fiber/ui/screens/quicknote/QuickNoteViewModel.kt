@@ -54,6 +54,7 @@ class QuickNoteViewModel @Inject constructor(
 
     private val draftTargetMutex = Mutex()
     private var draftTarget: LibraryTarget? = null
+    private val pendingAttachmentUris = mutableSetOf<String>()
 
     /**
      * 更新输入内容
@@ -88,6 +89,7 @@ class QuickNoteViewModel @Inject constructor(
             }
             when (val result = attachmentRepository.copyImage(sourceUri, target)) {
                 is FileResult.Success -> {
+                    pendingAttachmentUris += result.data.uri
                     _uiState.value = _uiState.value.copy(
                         attachments = _uiState.value.attachments + result.data,
                         isAddingImage = false
@@ -105,9 +107,32 @@ class QuickNoteViewModel @Inject constructor(
     }
 
     fun removeAttachment(relativePath: String) {
+        val attachment = _uiState.value.attachments.firstOrNull { it.relativePath == relativePath }
         _uiState.value = _uiState.value.copy(
             attachments = _uiState.value.attachments.filterNot { it.relativePath == relativePath }
         )
+        if (attachment != null && pendingAttachmentUris.remove(attachment.uri)) {
+            viewModelScope.launch {
+                when (val result = attachmentRepository.delete(attachment.uri)) {
+                    is FileResult.Error -> {
+                        Timber.e("QuickNoteViewModel: 删除附件失败，uri=${attachment.uri}, error=${result.error}")
+                        _uiState.value = _uiState.value.copy(error = result.error.toUserMessage())
+                    }
+                    is FileResult.Success,
+                    is FileResult.Loading -> Unit
+                }
+            }
+        }
+    }
+
+    fun discardDraft(onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val urisToDelete = pendingAttachmentUris.toList()
+            pendingAttachmentUris.clear()
+            _uiState.value = QuickNoteUiState()
+            draftTargetMutex.withLock { draftTarget = null }
+            onComplete(deleteAttachments(urisToDelete))
+        }
     }
 
     /**
@@ -153,6 +178,7 @@ class QuickNoteViewModel @Inject constructor(
                         content = "",
                         attachments = emptyList()
                     )
+                    pendingAttachmentUris.clear()
                     draftTargetMutex.withLock { draftTarget = null }
                     Timber.d("QuickNoteViewModel: content 已清空")
 
@@ -187,6 +213,21 @@ class QuickNoteViewModel @Inject constructor(
 
     private suspend fun resolveDraftTarget(): LibraryTarget? = draftTargetMutex.withLock {
         draftTarget ?: fileRepository.currentLibraryTarget.firstOrNull()?.also { draftTarget = it }
+    }
+
+    private suspend fun deleteAttachments(uris: List<String>): Boolean {
+        var allDeleted = true
+        uris.forEach { uri ->
+            when (val result = attachmentRepository.delete(uri)) {
+                is FileResult.Error -> {
+                    allDeleted = false
+                    Timber.e("QuickNoteViewModel: 回滚附件失败，uri=$uri, error=${result.error}")
+                }
+                is FileResult.Success,
+                is FileResult.Loading -> Unit
+            }
+        }
+        return allDeleted
     }
 }
 

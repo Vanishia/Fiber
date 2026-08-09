@@ -53,12 +53,16 @@ fun EditorScreen(
 
     LaunchedEffect(uiState.isSaving) {
         if (wasSaving && !uiState.isSaving) {
-            if (pendingClose) {
-                pendingClose = false
-                Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
-                onClose()
+            if (uiState.error == null) {
+                if (pendingClose) {
+                    pendingClose = false
+                    Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
+                    onClose()
+                } else {
+                    Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
+                }
             } else {
-                Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
+                pendingClose = false
             }
         }
         wasSaving = uiState.isSaving
@@ -133,7 +137,12 @@ fun EditorScreen(
             onExitWithoutSaving = {
                 showUnsavedDialog = false
                 pendingClose = false
-                onClose()
+                viewModel.discardChanges { allDeleted ->
+                    if (!allDeleted) {
+                        Toast.makeText(context, "部分新附件清理失败", Toast.LENGTH_SHORT).show()
+                    }
+                    onClose()
+                }
             },
             successColor = successColor,
             errorColor = errorColor

@@ -1,5 +1,7 @@
 package com.bird.fiber.ui.screens.quicknote
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +37,18 @@ fun QuickNoteScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun discardAndClose() {
+        viewModel.discardDraft { allDeleted ->
+            if (!allDeleted) {
+                Toast.makeText(context, "部分新附件清理失败", Toast.LENGTH_SHORT).show()
+            }
+            onClose()
+        }
+    }
+
+    BackHandler(onBack = ::discardAndClose)
 
     // 监听一次性事件（保存成功）
     LaunchedEffect(Unit) {
@@ -53,7 +67,7 @@ fun QuickNoteScreen(
             TopAppBar(
                 title = { Text("快速记录") },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = ::discardAndClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }

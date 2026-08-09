@@ -160,6 +160,57 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun discardChanges_deletesOnlyNewSessionAttachment() = runTest {
+        val fileUri = "content://test/file.md"
+        val attachment = sessionAttachment()
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("existing")
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery { attachmentRepository.delete(attachment.uri) } returns FileResult.Success(Unit)
+
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        var cleanupSucceeded: Boolean? = null
+        viewModel.discardChanges { cleanupSucceeded = it }
+        advanceUntilIdle()
+
+        assertEquals(true, cleanupSucceeded)
+        coVerify(exactly = 1) { attachmentRepository.delete(attachment.uri) }
+    }
+
+    @Test
+    fun discardChanges_existingMarkdownImageDoesNotDeleteAttachment() = runTest {
+        val fileUri = "content://test/file.md"
+        coEvery { fileRepository.readFileContent(fileUri) } returns
+            FileResult.Success("![已有图片](attachments/existing.png)")
+
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        viewModel.discardChanges { }
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { attachmentRepository.delete(any()) }
+    }
+
+    @Test
+    fun discardChanges_deleteFailure_reportsFailureAndStillCompletes() = runTest {
+        val attachment = sessionAttachment()
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery { attachmentRepository.delete(attachment.uri) } returns
+            FileResult.Error(FileError.Unknown("清理失败"))
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        var cleanupSucceeded: Boolean? = null
+        viewModel.discardChanges { cleanupSucceeded = it }
+        advanceUntilIdle()
+
+        assertEquals(false, cleanupSucceeded)
+        coVerify(exactly = 1) { attachmentRepository.delete(attachment.uri) }
+    }
+
+    @Test
     fun hasUnsavedChanges_contentModified_returnsTrue() = runTest {
         // Arrange
         val fileUri = "content://test/file.md"
@@ -235,6 +286,48 @@ class EditorViewModelTest {
         coVerify { fileRepository.saveFileContent(fileUri, content) }
         coVerify { eventBus.emit(any<AppEvent.FileUpdated>()) }
         assertFalse(viewModel.uiState.value.isSaving)
+    }
+
+    @Test
+    fun saveFile_success_commitsSessionAttachmentSoLaterDiscardDoesNotDeleteIt() = runTest {
+        val fileUri = "content://test/file.md"
+        val attachment = sessionAttachment()
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("")
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery { fileRepository.saveFileContent(fileUri, any()) } returns FileResult.Success(Unit)
+
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.saveFile()
+        advanceUntilIdle()
+        viewModel.discardChanges { }
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { attachmentRepository.delete(attachment.uri) }
+    }
+
+    @Test
+    fun saveFile_failureKeepsSessionAttachmentForRetryOrDiscard() = runTest {
+        val fileUri = "content://test/file.md"
+        val attachment = sessionAttachment()
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("")
+        coEvery { attachmentRepository.copyImage("content://source/image", null) } returns FileResult.Success(attachment)
+        coEvery { fileRepository.saveFileContent(fileUri, any()) } returns
+            FileResult.Error(FileError.Unknown("保存失败"))
+        coEvery { attachmentRepository.delete(attachment.uri) } returns FileResult.Success(Unit)
+
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.saveFile()
+        advanceUntilIdle()
+        viewModel.discardChanges { }
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { attachmentRepository.delete(attachment.uri) }
     }
 
     @Test
@@ -367,4 +460,11 @@ class EditorViewModelTest {
         // Assert
         assertEquals(content, viewModel.uiState.value.content)
     }
+
+    private fun sessionAttachment() = Attachment(
+        displayName = "diagram-20260809-153012-a1b2.png",
+        relativePath = "attachments/diagram-20260809-153012-a1b2.png",
+        uri = "content://test/session-image.png",
+        libraryTarget = LibraryTarget("library-1", "content://test/library")
+    )
 }

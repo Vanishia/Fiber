@@ -354,6 +354,9 @@ class QuickNoteViewModelTest {
             createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
         }
         assertTrue(viewModel.uiState.value.attachments.isEmpty())
+        viewModel.discardDraft()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { attachmentRepository.delete(attachment.uri) }
     }
 
     @Test
@@ -407,5 +410,72 @@ class QuickNoteViewModelTest {
         coVerify(exactly = 1) {
             createMarkdownFile(target = targetA, content = "![图片](attachments/image.png)", fileName = null)
         }
+    }
+
+    @Test
+    fun removeAttachment_deletesExactSessionAttachmentUri() = runTest {
+        val attachment = Attachment(
+            displayName = "image.png",
+            relativePath = "attachments/image.png",
+            uri = "content://test/library-a/image.png",
+            libraryTarget = targetA
+        )
+        coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
+            FileResult.Success(attachment)
+        coEvery { attachmentRepository.delete(attachment.uri) } returns FileResult.Success(Unit)
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.removeAttachment(attachment.relativePath)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.attachments.isEmpty())
+        coVerify(exactly = 1) { attachmentRepository.delete(attachment.uri) }
+    }
+
+    @Test
+    fun removeAttachment_deleteFailure_reportsErrorWithoutRestoringAttachment() = runTest {
+        val attachment = Attachment(
+            displayName = "image.png",
+            relativePath = "attachments/image.png",
+            uri = "content://test/library-a/image.png",
+            libraryTarget = targetA
+        )
+        coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
+            FileResult.Success(attachment)
+        coEvery { attachmentRepository.delete(attachment.uri) } returns
+            FileResult.Error(FileError.Unknown("清理失败"))
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.removeAttachment(attachment.relativePath)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.attachments.isEmpty())
+        assertEquals("清理失败", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun saveNote_failureThenDiscard_deletesPendingAttachment() = runTest {
+        val attachment = Attachment(
+            displayName = "image.png",
+            relativePath = "attachments/image.png",
+            uri = "content://test/library-a/image.png",
+            libraryTarget = targetA
+        )
+        coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
+            FileResult.Success(attachment)
+        coEvery { createMarkdownFile(targetA, any(), null) } returns
+            FileResult.Error(FileError.Unknown("保存失败"))
+        coEvery { attachmentRepository.delete(attachment.uri) } returns FileResult.Success(Unit)
+
+        viewModel.addImage("content://source/image")
+        advanceUntilIdle()
+        viewModel.saveNote()
+        advanceUntilIdle()
+        viewModel.discardDraft()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { attachmentRepository.delete(attachment.uri) }
     }
 }

@@ -60,8 +60,9 @@ class AttachmentRepositoryImpl @Inject constructor(
             if (!mimeType.startsWith("image/")) {
                 return@withContext FileResult.Error(FileError.Unknown("选择的文件不是图片"))
             }
-            val extension = resolveExtension(source, mimeType)
-            val fileName = generateFileName(extension)
+            val sourceDisplayName = queryDisplayName(source)
+            val extension = resolveExtension(sourceDisplayName, mimeType)
+            val fileName = AttachmentFileNameGenerator.generate(sourceDisplayName, extension)
             createdFile = attachments.createFile(mimeType, fileName)
                 ?: return@withContext FileResult.Error(
                     FileError.IOFailed(targetFolderUri, IllegalStateException("无法创建图片文件"))
@@ -100,6 +101,23 @@ class AttachmentRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun delete(uri: String): FileResult<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri.toUri())
+            if (deleted) {
+                FileResult.Success(Unit)
+            } else {
+                FileResult.Error(FileError.IOFailed(uri, IllegalStateException("无法删除附件")))
+            }
+        } catch (e: SecurityException) {
+            Timber.e(e, "AttachmentRepository: delete permission denied uri=%s", uri)
+            FileResult.Error(FileError.PermissionDenied(uri))
+        } catch (e: Exception) {
+            Timber.e(e, "AttachmentRepository: delete failed uri=%s", uri)
+            FileResult.Error(FileError.IOFailed(uri, e))
+        }
+    }
+
     override fun resolveUri(markdownFileUri: String, relativePath: String): String? {
         val normalized = relativePath.removePrefix("./").replace('\\', '/')
         if (!normalized.startsWith("$ATTACHMENTS_DIRECTORY/") || ".." in normalized.split('/')) {
@@ -121,8 +139,8 @@ class AttachmentRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun resolveExtension(sourceUri: Uri, mimeType: String): String {
-        val displayName = context.contentResolver.query(
+    private fun queryDisplayName(sourceUri: Uri): String? {
+        return context.contentResolver.query(
             sourceUri,
             arrayOf(OpenableColumns.DISPLAY_NAME),
             null,
@@ -131,19 +149,38 @@ class AttachmentRepositoryImpl @Inject constructor(
         )?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }
+    }
+
+    private fun resolveExtension(displayName: String?, mimeType: String): String {
         val fromName = displayName?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.matches(EXTENSION_PATTERN) }
         return fromName ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
     }
 
-    private fun generateFileName(extension: String): String {
-        val timestamp = LocalDateTime.now().format(FILE_NAME_TIME_FORMAT)
-        val suffix = UUID.randomUUID().toString().take(6)
-        return "$timestamp-$suffix.$extension"
-    }
-
     companion object {
         const val ATTACHMENTS_DIRECTORY = "attachments"
-        private val FILE_NAME_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")
         private val EXTENSION_PATTERN = Regex("[a-z0-9]{1,8}")
     }
+}
+
+internal object AttachmentFileNameGenerator {
+    fun generate(
+        displayName: String?,
+        extension: String,
+        timestamp: LocalDateTime = LocalDateTime.now(),
+        suffix: String = UUID.randomUUID().toString().take(4)
+    ): String {
+        val originalBaseName = displayName
+            ?.substringBeforeLast('.', displayName)
+            ?.replace(INVALID_FILE_NAME_CHARS, "-")
+            ?.trim(' ', '.', '-')
+            ?.take(MAX_ORIGINAL_NAME_LENGTH)
+            ?.takeIf { it.isNotBlank() }
+            ?: "image"
+        val formattedTimestamp = timestamp.format(FILE_NAME_TIME_FORMAT)
+        return "$originalBaseName-$formattedTimestamp-$suffix.$extension"
+    }
+
+    private const val MAX_ORIGINAL_NAME_LENGTH = 80
+    private val FILE_NAME_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+    private val INVALID_FILE_NAME_CHARS = Regex("[\\\\/:*?\"<>|]")
 }

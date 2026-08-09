@@ -10,6 +10,7 @@ import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -67,6 +68,7 @@ class EditorViewModel : ViewModel {
 
     private var currentFileUri: String? = null
     private var originalContent: String = ""  // 保存原始内容，用于判断是否有修改
+    private val pendingAttachmentUris = mutableSetOf<String>()
 
     private val renderRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
@@ -136,6 +138,7 @@ class EditorViewModel : ViewModel {
             _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
             when (val result = attachmentRepository.copyImage(sourceUri)) {
                 is com.bird.fiber.data.model.FileResult.Success -> {
+                    pendingAttachmentUris += result.data.uri
                     val current = _uiState.value.textValue
                     val start = current.selection.min.coerceIn(0, current.text.length)
                     val end = current.selection.max.coerceIn(start, current.text.length)
@@ -172,6 +175,7 @@ class EditorViewModel : ViewModel {
                 is com.bird.fiber.data.model.FileResult.Success -> {
                     // 更新原始内容为当前内容
                     originalContent = _uiState.value.content
+                    pendingAttachmentUris.clear()
                     _uiState.value = _uiState.value.copy(isSaving = false)
                     // 发送文件更新事件，通知文件列表刷新
                     eventBus.emit(AppEvent.FileUpdated(uri))
@@ -200,7 +204,26 @@ class EditorViewModel : ViewModel {
      * 检查是否有未保存的修改
      */
     fun hasUnsavedChanges(): Boolean {
-        return uiState.value.content != originalContent
+        return uiState.value.content != originalContent || pendingAttachmentUris.isNotEmpty()
+    }
+
+    fun discardChanges(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val urisToDelete = pendingAttachmentUris.toList()
+            pendingAttachmentUris.clear()
+            var allDeleted = true
+            urisToDelete.forEach { uri ->
+                when (val result = attachmentRepository.delete(uri)) {
+                    is FileResult.Error -> {
+                        allDeleted = false
+                        timber.log.Timber.e("EditorViewModel: 回滚附件失败，uri=$uri, error=${result.error}")
+                    }
+                    is FileResult.Success,
+                    is FileResult.Loading -> Unit
+                }
+            }
+            onComplete(allDeleted)
+        }
     }
 
     /**
