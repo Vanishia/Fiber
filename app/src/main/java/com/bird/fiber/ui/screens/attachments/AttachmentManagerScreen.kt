@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,9 +43,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -130,7 +134,10 @@ fun AttachmentManagerScreen(
                 actions = {
                     if (!uiState.isSelecting) {
                         Box {
-                            IconButton(onClick = { showFilterMenu = true }) {
+                            IconButton(
+                                onClick = { showFilterMenu = true },
+                                enabled = uiState.referencesLoaded
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.FilterList,
                                     contentDescription = "筛选：${uiState.filter.label}"
@@ -180,17 +187,31 @@ fun AttachmentManagerScreen(
             }
         }
     ) { paddingValues ->
-        AttachmentManagerContent(
-            uiState = uiState,
-            onRetry = viewModel::loadAttachments,
-            onAttachmentClick = { attachment ->
-                if (uiState.isSelecting) viewModel.toggleSelection(attachment)
-            },
-            onAttachmentLongClick = viewModel::startSelection,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-        )
+        ) {
+            if (uiState.error == null) {
+                AssociationStatusBar(
+                    isLoading = uiState.isReferencesLoading,
+                    isLoaded = uiState.referencesLoaded,
+                    error = uiState.referenceError,
+                    onRetry = viewModel::retryReferences
+                )
+            }
+            AttachmentManagerContent(
+                uiState = uiState,
+                onRetry = viewModel::loadAttachments,
+                onAttachmentClick = { attachment ->
+                    if (uiState.isSelecting) viewModel.toggleSelection(attachment)
+                },
+                onAttachmentLongClick = viewModel::startSelection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        }
     }
 
     if (showDeleteConfirmation) {
@@ -256,6 +277,7 @@ private fun AttachmentManagerContent(
                     attachment = attachment,
                     selected = attachment.uri in uiState.selectedUris,
                     selectionMode = uiState.isSelecting,
+                    referencesLoaded = uiState.referencesLoaded,
                     onClick = { onAttachmentClick(attachment) },
                     onLongClick = { onAttachmentLongClick(attachment) }
                 )
@@ -270,6 +292,7 @@ private fun AttachmentCard(
     attachment: ManagedAttachment,
     selected: Boolean,
     selectionMode: Boolean,
+    referencesLoaded: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -337,27 +360,31 @@ private fun AttachmentCard(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.size(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (attachment.isReferenced) Icons.Default.Link else Icons.Default.LinkOff,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = if (attachment.isReferenced) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (attachment.isReferenced) {
-                        "关联 ${attachment.referencedBy.size} 个文件"
-                    } else {
-                        "未关联"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (referencesLoaded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (attachment.isReferenced) Icons.Default.Link else Icons.Default.LinkOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (attachment.isReferenced) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (attachment.isReferenced) {
+                            "关联 ${attachment.referencedBy.size} 个文件"
+                        } else {
+                            "未关联"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.size(4.dp))
             Text(
@@ -367,6 +394,52 @@ private fun AttachmentCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun AssociationStatusBar(
+    isLoading: Boolean,
+    isLoaded: Boolean,
+    error: String?,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            isLoading -> LinearWavyProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+            )
+            isLoaded -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "已加载关联",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            error != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "关联加载失败",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+                TextButton(onClick = onRetry) { Text("重试") }
+            }
         }
     }
 }

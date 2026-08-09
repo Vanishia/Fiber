@@ -13,6 +13,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -47,7 +48,10 @@ class AttachmentManagerViewModelTest {
     @Test
     fun filter_showsOnlyRequestedAssociationState() {
         coEvery { attachmentRepository.listForLibrary(LIBRARY_ID) } returns
-            FileResult.Success(listOf(ORPHAN, REFERENCED))
+            FileResult.Success(QUICK_ATTACHMENTS)
+        coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } returns FileResult.Success(REFERENCE_MAP)
         val viewModel = createViewModel()
 
         viewModel.setFilter(AttachmentFilter.REFERENCED)
@@ -60,7 +64,10 @@ class AttachmentManagerViewModelTest {
     @Test
     fun longPress_selectsOnlyOrphanAttachments() {
         coEvery { attachmentRepository.listForLibrary(LIBRARY_ID) } returns
-            FileResult.Success(listOf(ORPHAN, REFERENCED))
+            FileResult.Success(QUICK_ATTACHMENTS)
+        coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } returns FileResult.Success(REFERENCE_MAP)
         val viewModel = createViewModel()
 
         viewModel.startSelection(REFERENCED)
@@ -78,6 +85,9 @@ class AttachmentManagerViewModelTest {
             FileResult.Success(emptyList())
         )
         coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } returns FileResult.Success(emptyMap())
+        coEvery {
             attachmentRepository.deleteOrphans(LIBRARY_ID, setOf(ORPHAN.uri))
         } returns FileResult.Success(AttachmentDeletionSummary(1, 0, 0))
         val viewModel = createViewModel()
@@ -90,6 +100,32 @@ class AttachmentManagerViewModelTest {
         }
         assertFalse(viewModel.uiState.value.isSelecting)
         assertTrue(viewModel.uiState.value.attachments.isEmpty())
+    }
+
+    @Test
+    fun attachments_areVisibleBeforeReferencesFinishLoading() = runTest {
+        val references = CompletableDeferred<FileResult<Map<String, List<AttachmentReference>>>>()
+        coEvery { attachmentRepository.listForLibrary(LIBRARY_ID) } returns
+            FileResult.Success(QUICK_ATTACHMENTS)
+        coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } coAnswers { references.await() }
+
+        val viewModel = createViewModel()
+
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.isReferencesLoading)
+        assertFalse(viewModel.uiState.value.referencesLoaded)
+        assertEquals(2, viewModel.uiState.value.attachments.size)
+        assertTrue(viewModel.uiState.value.attachments.all { it.referencedBy.isEmpty() })
+
+        viewModel.setFilter(AttachmentFilter.REFERENCED)
+        assertEquals(AttachmentFilter.ALL, viewModel.uiState.value.filter)
+
+        references.complete(FileResult.Success(REFERENCE_MAP))
+
+        assertTrue(viewModel.uiState.value.referencesLoaded)
+        assertEquals(REFERENCED.referencedBy, viewModel.uiState.value.attachments[1].referencedBy)
     }
 
     private fun createViewModel() = AttachmentManagerViewModel(
@@ -110,6 +146,11 @@ class AttachmentManagerViewModelTest {
         val REFERENCED = attachment(
             name = "used.jpg",
             references = listOf(AttachmentReference("content://test/note", "note"))
+        )
+        val REFERENCE_MAP = mapOf(REFERENCED.uri to REFERENCED.referencedBy)
+        val QUICK_ATTACHMENTS = listOf(
+            ORPHAN,
+            REFERENCED.copy(referencedBy = emptyList())
         )
 
         fun attachment(

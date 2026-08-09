@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
             FiberTheme(
                 darkTheme = darkTheme,
                 dynamicColor = settingsUiState.isDynamicColorEnabled,
-                colorSchemeType = settingsUiState.colorScheme,
+                seedColor = settingsUiState.themeSeedColor,
                 fontSizeScale = fontSizeScale
             ) {
                 val navController = rememberNavController()

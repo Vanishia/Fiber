@@ -145,22 +145,6 @@ class AttachmentRepositoryImpl @Inject constructor(
                 )
             }
 
-            val filesWithDestinations = MarkdownFileScanner().scan(
-                contentResolver = context.contentResolver,
-                folderUri = library.folderUri,
-                libraryId = libraryId
-            ).map { file ->
-                val content = readMarkdownContent(file.uri)
-                MarkdownAttachmentSource(
-                    fileUri = file.uri,
-                    fileName = file.name,
-                    content = content,
-                    destinations = MarkdownUtils.extractImageDestinations(content)
-                        .mapNotNull(::normalizeAttachmentPath)
-                        .toSet()
-                )
-            }
-
             val attachments = attachmentsDirectory.listFiles().mapNotNull { file ->
                 if (!file.isFile) return@mapNotNull null
                 val name = file.name ?: return@mapNotNull null
@@ -180,10 +164,7 @@ class AttachmentRepositoryImpl @Inject constructor(
                     lastModified = file.lastModified(),
                     width = dimensions.first,
                     height = dimensions.second,
-                    referencedBy = findAttachmentReferences(
-                        relativePath = relativePath,
-                        filesWithDestinations = filesWithDestinations
-                    )
+                    referencedBy = emptyList()
                 )
             }.sortedWith(
                 compareByDescending<ManagedAttachment> { it.lastModified }
@@ -200,6 +181,48 @@ class AttachmentRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun loadReferencesForLibrary(
+        libraryId: String,
+        attachments: List<ManagedAttachment>
+    ): FileResult<Map<String, List<AttachmentReference>>> = withContext(Dispatchers.IO) {
+        if (attachments.isEmpty()) return@withContext FileResult.Success(emptyMap())
+
+        try {
+            val library = libraryRepository.getLibraryById(libraryId)
+                ?: return@withContext FileResult.Error(FileError.NotFound(libraryId))
+            val filesWithDestinations = MarkdownFileScanner().scan(
+                contentResolver = context.contentResolver,
+                folderUri = library.folderUri,
+                libraryId = libraryId
+            ).map { file ->
+                val content = readMarkdownContent(file.uri)
+                MarkdownAttachmentSource(
+                    fileUri = file.uri,
+                    fileName = file.name,
+                    content = content,
+                    destinations = MarkdownUtils.extractImageDestinations(content)
+                        .mapNotNull(::normalizeAttachmentPath)
+                        .toSet()
+                )
+            }
+
+            FileResult.Success(
+                attachments.associate { attachment ->
+                    attachment.uri to findAttachmentReferences(
+                        relativePath = attachment.relativePath,
+                        filesWithDestinations = filesWithDestinations
+                    )
+                }
+            )
+        } catch (e: SecurityException) {
+            Timber.e(e, "AttachmentRepository: references permission denied library=%s", libraryId)
+            FileResult.Error(FileError.PermissionDenied(libraryId))
+        } catch (e: Exception) {
+            Timber.e(e, "AttachmentRepository: references failed library=%s", libraryId)
+            FileResult.Error(FileError.IOFailed(libraryId, e))
+        }
+    }
+
     override suspend fun deleteOrphans(
         libraryId: String,
         uris: Set<String>
@@ -212,36 +235,42 @@ class AttachmentRepositoryImpl @Inject constructor(
             is FileResult.Error -> FileResult.Error(currentResult.error)
             is FileResult.Loading -> FileResult.Loading
             is FileResult.Success -> {
-                val requested = currentResult.data.filter { it.uri in uris }
-                var deletedCount = 0
-                var skippedReferencedCount = 0
-                var failedCount = uris.size - requested.size
+                when (val referencesResult = loadReferencesForLibrary(libraryId, currentResult.data)) {
+                    is FileResult.Error -> FileResult.Error(referencesResult.error)
+                    is FileResult.Loading -> FileResult.Loading
+                    is FileResult.Success -> {
+                        val requested = currentResult.data.filter { it.uri in uris }
+                        var deletedCount = 0
+                        var skippedReferencedCount = 0
+                        var failedCount = uris.size - requested.size
 
-                requested.forEach { attachment ->
-                    if (attachment.isReferenced) {
-                        skippedReferencedCount++
-                        return@forEach
-                    }
+                        requested.forEach { attachment ->
+                            if (referencesResult.data[attachment.uri].orEmpty().isNotEmpty()) {
+                                skippedReferencedCount++
+                                return@forEach
+                            }
 
-                    try {
-                        if (DocumentsContract.deleteDocument(context.contentResolver, attachment.uri.toUri())) {
-                            deletedCount++
-                        } else {
-                            failedCount++
+                            try {
+                                if (DocumentsContract.deleteDocument(context.contentResolver, attachment.uri.toUri())) {
+                                    deletedCount++
+                                } else {
+                                    failedCount++
+                                }
+                            } catch (e: Exception) {
+                                failedCount++
+                                Timber.e(e, "AttachmentRepository: orphan delete failed uri=%s", attachment.uri)
+                            }
                         }
-                    } catch (e: Exception) {
-                        failedCount++
-                        Timber.e(e, "AttachmentRepository: orphan delete failed uri=%s", attachment.uri)
+
+                        FileResult.Success(
+                            AttachmentDeletionSummary(
+                                deletedCount = deletedCount,
+                                skippedReferencedCount = skippedReferencedCount,
+                                failedCount = failedCount
+                            )
+                        )
                     }
                 }
-
-                FileResult.Success(
-                    AttachmentDeletionSummary(
-                        deletedCount = deletedCount,
-                        skippedReferencedCount = skippedReferencedCount,
-                        failedCount = failedCount
-                    )
-                )
             }
         }
     }

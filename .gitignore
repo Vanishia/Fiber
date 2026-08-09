@@ -51,4 +51,5 @@ release/
 # Logs / personal docs
 LOGS/
 *.log
+AGENTS.md
 

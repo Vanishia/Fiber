@@ -3,13 +3,23 @@ package com.bird.fiber.ui.screens.settings
 /**
  * 配色方案类型
  */
-enum class ColorSchemeType(val label: String) {
-    DEFAULT("默认紫"),
-    SAKURA("樱花粉"),
-    BLUE("天空蓝"),
-    OCEAN("海水青"),
-    GRAY("雅致灰"),
-    AMBER("落叶黄")
+enum class ColorSchemeType(
+    val label: String,
+    val seedColor: Int,
+    val isRecommended: Boolean = true
+) {
+    // 保留 DEFAULT 及既有顺序，用于兼容旧版 DataStore 的 ordinal。
+    DEFAULT("默认紫", 0xFF6750A4.toInt(), false),
+    SAKURA("樱花粉", 0xFFF48FB1.toInt()),
+    BLUE("天空蓝", 0xFF2196F3.toInt()),
+    OCEAN("海水青", 0xFF006B6B.toInt()),
+    GRAY("雅致灰", 0xFF607D8B.toInt()),
+    AMBER("落叶黄", 0xFFFFA000.toInt()),
+    CUSTOM("自定义", 0xFF2196F3.toInt(), false);
+
+    companion object {
+        val recommended: List<ColorSchemeType> = entries.filter { it.isRecommended }
+    }
 }
 
 /**
@@ -27,12 +37,14 @@ enum class DarkMode {
  * @property fontSizeLevel 字体大小级别（0-4 对应 80%, 90%, 100%, 110%, 120%）
  * @property isDynamicColorEnabled 是否启用动态颜色（Android 12+）
  * @property colorScheme 配色方案
+ * @property themeSeedColor 用于生成全局 Material 3 色板的 ARGB 种子色
  * @property darkMode 深色模式设置
  */
 data class SettingsUiState(
     val fontSizeLevel: Int = 2,  // 默认 100%
     val isDynamicColorEnabled: Boolean = true,
-    val colorScheme: ColorSchemeType = ColorSchemeType.DEFAULT,
+    val colorScheme: ColorSchemeType = ColorSchemeType.BLUE,
+    val themeSeedColor: Int = ColorSchemeType.BLUE.seedColor,
     val darkMode: DarkMode = DarkMode.SYSTEM
 ) {
     companion object {

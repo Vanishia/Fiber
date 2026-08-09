@@ -67,17 +67,26 @@ class SettingsViewModel @Inject constructor(
      * 选择配色时自动关闭动态颜色，确保配色能立即生效
      */
     fun setColorScheme(scheme: ColorSchemeType) {
-        // 如果动态颜色开启，先关闭它，否则配色不会生效
-        val needDisableDynamicColor = _uiState.value.isDynamicColorEnabled
+        if (scheme.isRecommended) {
+            applySeedColor(scheme, scheme.seedColor)
+        }
+    }
+
+    /**
+     * 使用用户从色环选择的种子色生成全局配色。
+     */
+    fun setCustomSeedColor(seedColor: Int) {
+        applySeedColor(ColorSchemeType.CUSTOM, seedColor or (0xFF shl 24))
+    }
+
+    private fun applySeedColor(scheme: ColorSchemeType, seedColor: Int) {
         _uiState.value = _uiState.value.copy(
             colorScheme = scheme,
+            themeSeedColor = seedColor,
             isDynamicColorEnabled = false
         )
         viewModelScope.launch {
-            if (needDisableDynamicColor) {
-                settingsDataStore.saveDynamicColorEnabled(false)
-            }
-            settingsDataStore.saveColorScheme(scheme)
+            settingsDataStore.saveThemeSelection(scheme, seedColor)
         }
     }
 

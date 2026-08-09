@@ -33,7 +33,15 @@ class AttachmentManagerViewModel @Inject constructor(
     fun loadAttachments() {
         if (_uiState.value.isDeleting) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                isReferencesLoading = true,
+                referencesLoaded = false,
+                referenceError = null,
+                selectedUris = emptySet(),
+                filter = AttachmentFilter.ALL,
+                error = null
+            )
             val library = libraryRepository.getLibraryById(libraryId)
             if (library == null) {
                 _uiState.value = _uiState.value.copy(
@@ -52,11 +60,20 @@ class AttachmentManagerViewModel @Inject constructor(
                         isLoading = false,
                         error = null
                     )
+                    if (result.data.isEmpty()) {
+                        _uiState.value = _uiState.value.copy(
+                            isReferencesLoading = false,
+                            referencesLoaded = true
+                        )
+                    } else {
+                        loadReferences(result.data)
+                    }
                 }
                 is FileResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         libraryName = library.name,
                         isLoading = false,
+                        isReferencesLoading = false,
                         error = result.error.toUserMessage()
                     )
                 }
@@ -66,10 +83,15 @@ class AttachmentManagerViewModel @Inject constructor(
     }
 
     fun setFilter(filter: AttachmentFilter) {
+        if (!_uiState.value.referencesLoaded) return
         _uiState.value = _uiState.value.copy(filter = filter)
     }
 
     fun startSelection(attachment: ManagedAttachment) {
+        if (!_uiState.value.referencesLoaded) {
+            _uiState.value = _uiState.value.copy(message = "关联状态仍在加载，请稍后")
+            return
+        }
         if (attachment.isReferenced) {
             _uiState.value = _uiState.value.copy(message = "暂不支持删除有关联的文件")
             return
@@ -78,6 +100,10 @@ class AttachmentManagerViewModel @Inject constructor(
     }
 
     fun toggleSelection(attachment: ManagedAttachment) {
+        if (!_uiState.value.referencesLoaded) {
+            _uiState.value = _uiState.value.copy(message = "关联状态仍在加载，请稍后")
+            return
+        }
         if (attachment.isReferenced) {
             _uiState.value = _uiState.value.copy(message = "暂不支持删除有关联的文件")
             return
@@ -93,7 +119,11 @@ class AttachmentManagerViewModel @Inject constructor(
 
     fun deleteSelected() {
         val selectedUris = _uiState.value.selectedUris
-        if (selectedUris.isEmpty() || _uiState.value.isDeleting) return
+        if (
+            selectedUris.isEmpty() ||
+            _uiState.value.isDeleting ||
+            !_uiState.value.referencesLoaded
+        ) return
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isDeleting = true)
@@ -134,6 +164,42 @@ class AttachmentManagerViewModel @Inject constructor(
 
     fun consumeMessage() {
         _uiState.value = _uiState.value.copy(message = null)
+    }
+
+    fun retryReferences() {
+        val attachments = _uiState.value.attachments
+        if (attachments.isEmpty() || _uiState.value.isReferencesLoading) return
+        viewModelScope.launch { loadReferences(attachments) }
+    }
+
+    private suspend fun loadReferences(attachments: List<ManagedAttachment>) {
+        _uiState.value = _uiState.value.copy(
+            isReferencesLoading = true,
+            referencesLoaded = false,
+            referenceError = null
+        )
+        when (val result = attachmentRepository.loadReferencesForLibrary(libraryId, attachments)) {
+            is FileResult.Success -> {
+                _uiState.value = _uiState.value.copy(
+                    attachments = attachments.map { attachment ->
+                        attachment.copy(
+                            referencedBy = result.data[attachment.uri].orEmpty()
+                        )
+                    },
+                    isReferencesLoading = false,
+                    referencesLoaded = true,
+                    referenceError = null
+                )
+            }
+            is FileResult.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    isReferencesLoading = false,
+                    referencesLoaded = false,
+                    referenceError = result.error.toUserMessage()
+                )
+            }
+            is FileResult.Loading -> Unit
+        }
     }
 
     companion object {

@@ -33,6 +33,7 @@ class SettingsDataStore @Inject constructor(
         private val FONT_SIZE_LEVEL = intPreferencesKey("font_size_level")
         private val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         private val COLOR_SCHEME = intPreferencesKey("color_scheme")
+        private val THEME_SEED_COLOR = intPreferencesKey("theme_seed_color")
         private val DARK_MODE = intPreferencesKey("dark_mode")
     }
 
@@ -40,12 +41,19 @@ class SettingsDataStore @Inject constructor(
      * 获取设置流
      */
     val settingsFlow: Flow<SettingsUiState> = dataStore.data.map { preferences ->
+        val storedScheme = ColorSchemeType.entries.getOrNull(
+            preferences[COLOR_SCHEME] ?: ColorSchemeType.BLUE.ordinal
+        )
+        // 默认紫已不再作为推荐项；旧设置无感迁移到新的默认蓝色。
+        val colorScheme = storedScheme
+            ?.takeUnless { it == ColorSchemeType.DEFAULT }
+            ?: ColorSchemeType.BLUE
+
         SettingsUiState(
             fontSizeLevel = preferences[FONT_SIZE_LEVEL] ?: 2,
             isDynamicColorEnabled = preferences[DYNAMIC_COLOR_ENABLED] ?: true,
-            colorScheme = ColorSchemeType.entries.getOrNull(
-                preferences[COLOR_SCHEME] ?: 0
-            ) ?: ColorSchemeType.DEFAULT,
+            colorScheme = colorScheme,
+            themeSeedColor = preferences[THEME_SEED_COLOR] ?: colorScheme.seedColor,
             darkMode = DarkMode.entries.getOrNull(
                 preferences[DARK_MODE] ?: 0
             ) ?: DarkMode.SYSTEM
@@ -71,11 +79,13 @@ class SettingsDataStore @Inject constructor(
     }
 
     /**
-     * 保存配色方案
+     * 原子保存主题选择。选择种子色时同时关闭系统动态颜色，避免状态短暂回跳。
      */
-    suspend fun saveColorScheme(scheme: ColorSchemeType) {
+    suspend fun saveThemeSelection(scheme: ColorSchemeType, seedColor: Int) {
         dataStore.edit { preferences ->
+            preferences[DYNAMIC_COLOR_ENABLED] = false
             preferences[COLOR_SCHEME] = scheme.ordinal
+            preferences[THEME_SEED_COLOR] = seedColor
         }
     }
 
