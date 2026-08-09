@@ -49,7 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -83,6 +86,8 @@ fun QuickNoteBar(
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
     var cursorBounds by remember { mutableStateOf(Rect.Zero) }
     var inputSize by remember { mutableStateOf(IntSize.Zero) }
+    val surfaceColors = LocalFiberSurfaceColors.current
+    val isDarkSurface = surfaceColors.pageBackground.luminance() < 0.5f
     val isContentEmpty = content.isBlank() && attachments.isEmpty()
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onImageSelected(it.toString()) }
@@ -134,13 +139,21 @@ fun QuickNoteBar(
         ) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = LocalFiberSurfaceColors.current.searchInput,
+                color = surfaceColors.pageBackground,
                 border = BorderStroke(
                     width = if (isInputFocused) 2.dp else 1.dp,
                     color = if (isInputFocused) {
-                        MaterialTheme.colorScheme.primary
+                        if (isDarkSurface) {
+                            lerp(
+                                MaterialTheme.colorScheme.primary,
+                                Color.Black,
+                                0.18f
+                            )
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
                     } else {
-                        MaterialTheme.colorScheme.outline
+                        MaterialTheme.colorScheme.outlineVariant
                     }
                 ),
                 modifier = Modifier
@@ -227,8 +240,10 @@ fun QuickNoteBar(
                         .size(32.dp),
                     enabled = !isContentEmpty && !isSaving && !isAddingImage,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
                     if (isSaving) {

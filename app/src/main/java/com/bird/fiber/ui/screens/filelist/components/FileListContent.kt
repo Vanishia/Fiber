@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -199,6 +200,8 @@ fun FileListSkeleton(
     topPadding: androidx.compose.ui.unit.Dp = 56.dp,
     modifier: Modifier = Modifier
 ) {
+    val isDarkTheme = LocalFiberSurfaceColors.current.pageBackground.luminance() < 0.5f
+
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
@@ -211,8 +214,14 @@ fun FileListSkeleton(
                 colors = CardDefaults.cardColors(
                     containerColor = LocalFiberSurfaceColors.current.contentCard
                 ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                border = if (isDarkTheme) {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                } else {
+                    null
+                },
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (isDarkTheme) 0.dp else 2.dp
+                )
             ) {
                 Column(
                     modifier = Modifier

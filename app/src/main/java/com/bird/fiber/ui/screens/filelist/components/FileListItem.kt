@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,8 @@ fun FileListItem(
     onDelete: () -> Unit = {},
     onEdit: () -> Unit = {}
 ) {
+    val isDarkTheme = LocalFiberSurfaceColors.current.pageBackground.luminance() < 0.5f
+
     SwipeableContainer(
         onSwipeLeft = onDelete,
         onSwipeRight = onEdit
@@ -74,8 +77,14 @@ fun FileListItem(
             colors = CardDefaults.cardColors(
                 containerColor = LocalFiberSurfaceColors.current.contentCard
             ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            border = if (isDarkTheme) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            } else {
+                null
+            },
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isDarkTheme) 0.dp else 2.dp
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -127,7 +136,7 @@ fun FileListItem(
                         Icon(
                             imageVector = Icons.Default.Image,
                             contentDescription = "包含图片",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                             modifier = Modifier.size(16.dp)
                         )
                     }

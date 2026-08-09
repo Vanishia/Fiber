@@ -1,14 +1,12 @@
 package com.bird.fiber.ui.screens.sidebar
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -18,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.data.local.library.LibraryEntity
@@ -38,8 +37,6 @@ fun Sidebar(
     modifier: Modifier = Modifier,
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -77,7 +74,6 @@ fun SidebarContent(
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        // 顶部栏
         SidebarHeader(onSettingsClick = onSettingsClick)
 
         // 库列表
@@ -92,21 +88,22 @@ fun SidebarContent(
                 onDeleteClick = { library ->
                     viewModel.deleteLibrary(library)
                 },
-                onManageAttachments = onManageAttachments
+                onManageAttachments = onManageAttachments,
+                modifier = Modifier.weight(1f)
             )
         } else {
             // 空状态
             EmptyLibrariesState(
-                onAddLibrary = onAddLibrary
+                onAddLibrary = onAddLibrary,
+                modifier = Modifier.weight(1f)
             )
         }
 
-        // 底部区域：添加按钮
+        // 底部操作区
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp)
         ) {
             FilledTonalButton(
                 onClick = onAddLibrary,
@@ -125,37 +122,36 @@ fun SidebarContent(
     }
 }
 
-/**
- * 侧边栏顶部栏
- */
 @Composable
-private fun SidebarHeader(
-    onSettingsClick: () -> Unit = {}
-) {
-    Box(
+private fun SidebarHeader(onSettingsClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .heightIn(min = 56.dp)
+            .padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "笔记库",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.align(Alignment.CenterStart)
+            text = "Fiber",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
         )
 
-        // 设置按钮 - 右上角齿轮图标
         IconButton(
             onClick = onSettingsClick,
-            modifier = Modifier.align(Alignment.CenterEnd)
+            modifier = Modifier.size(40.dp),
+            colors = IconButtonDefaults.iconButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
-                contentDescription = "设置"
+                contentDescription = "设置",
+                modifier = Modifier.size(19.dp)
             )
         }
     }
-
-    HorizontalDivider()
 }
 
 /**
@@ -167,12 +163,13 @@ private fun LibraryList(
     selectedLibraryId: String?,
     onLibraryClick: (String) -> Unit,
     onDeleteClick: (LibraryEntity) -> Unit,
-    onManageAttachments: (String) -> Unit
+    onManageAttachments: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         items(libraries) { library ->
             LibraryListItem(
@@ -204,7 +201,7 @@ private fun LibraryListItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(20.dp),
         color = if (isSelected) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
@@ -212,32 +209,34 @@ private fun LibraryListItem(
         },
         onClick = onClick
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .heightIn(min = 52.dp)
+                .padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                Text(
-                    text = library.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
+            Text(
+                text = library.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
 
             IconButton(
                 onClick = { showMenu = true },
-                modifier = Modifier.align(Alignment.CenterEnd)
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     Icons.Default.MoreVert,
                     contentDescription = "更多",
+                    modifier = Modifier.size(20.dp),
                     tint = if (isSelected) {
                         MaterialTheme.colorScheme.onSecondaryContainer
                     } else {
@@ -280,10 +279,11 @@ private fun LibraryListItem(
  */
 @Composable
 private fun EmptyLibrariesState(
-    onAddLibrary: () -> Unit
+    onAddLibrary: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
         Column(
