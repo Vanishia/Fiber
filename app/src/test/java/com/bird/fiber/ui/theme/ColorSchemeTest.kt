@@ -30,6 +30,23 @@ class ColorSchemeTest {
     }
 
     @Test
+    fun `light and dark themes map surfaces to the intended roles`() {
+        ColorSchemeType.recommended.forEach { scheme ->
+            val light = colorSchemeFromSeed(scheme.seedColor, darkTheme = false)
+            val dark = colorSchemeFromSeed(scheme.seedColor, darkTheme = true)
+            val lightSurfaces = fiberSurfaceColors(light, darkTheme = false)
+            val darkSurfaces = fiberSurfaceColors(dark, darkTheme = true)
+
+            assertEquals(light.surfaceContainerLow, lightSurfaces.pageBackground)
+            assertEquals(light.surfaceContainerLowest, lightSurfaces.contentCard)
+            assertEquals(dark.surface, darkSurfaces.pageBackground)
+            assertEquals(dark.surfaceContainerLow, darkSurfaces.contentCard)
+            assertEquals(lightSurfaces.pageBackground, lightSurfaces.topBar)
+            assertEquals(darkSurfaces.pageBackground, darkSurfaces.topBar)
+        }
+    }
+
+    @Test
     fun `recommended colors exclude legacy purple and custom entry`() {
         assertEquals(5, ColorSchemeType.recommended.size)
         assertFalse(ColorSchemeType.DEFAULT in ColorSchemeType.recommended)

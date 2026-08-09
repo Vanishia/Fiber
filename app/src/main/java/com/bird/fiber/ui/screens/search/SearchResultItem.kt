@@ -1,7 +1,7 @@
 package com.bird.fiber.ui.screens.search
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.utils.FileUtils
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 @Composable
 internal fun SearchResultItem(
@@ -39,12 +40,9 @@ internal fun SearchResultItem(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSystemInDarkTheme()) {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            }
+            containerColor = LocalFiberSurfaceColors.current.contentCard
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -57,14 +55,14 @@ internal fun SearchResultItem(
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             if (file.libraryName.isNotBlank()) {
                 Text(
                     text = file.libraryName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -89,7 +87,7 @@ internal fun SearchResultItem(
                 Text(
                     text = FileUtils.formatDate(file.lastModified),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 if (file.path.isNotBlank()) {
@@ -111,7 +109,7 @@ internal fun SearchResultItem(
                     Icon(
                         imageVector = Icons.Default.Image,
                         contentDescription = "包含图片",
-                        tint = MaterialTheme.colorScheme.outline,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }

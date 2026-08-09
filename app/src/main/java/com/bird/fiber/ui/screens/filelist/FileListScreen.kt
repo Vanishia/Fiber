@@ -39,6 +39,7 @@ import com.bird.fiber.ui.screens.filelist.components.FileListContent
 import com.bird.fiber.ui.screens.filelist.components.FileListSkeleton
 import com.bird.fiber.ui.screens.filelist.components.NoFolderSelected
 import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
 
 /**
@@ -110,6 +111,7 @@ fun FileListScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->

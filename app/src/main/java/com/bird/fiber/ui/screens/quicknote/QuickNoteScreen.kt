@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 /**
  * 快速记录页面
@@ -63,6 +64,7 @@ fun QuickNoteScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         topBar = {
             TopAppBar(
                 title = { Text("快速记录") },
@@ -150,7 +152,7 @@ fun QuickNoteScreen(
                         containerColor = if (isContentEmpty) {
                             MaterialTheme.colorScheme.surfaceVariant
                         } else {
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.primaryContainer
                         }
                     ) {
                         if (uiState.isSaving) {
@@ -161,7 +163,7 @@ fun QuickNoteScreen(
                                 color = if (isContentEmpty) {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 } else {
-                                    MaterialTheme.colorScheme.onPrimary
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 }
                             )
                         } else {
@@ -171,7 +173,7 @@ fun QuickNoteScreen(
                                 tint = if (isContentEmpty) {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 } else {
-                                    MaterialTheme.colorScheme.onPrimary
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 }
                             )
                         }

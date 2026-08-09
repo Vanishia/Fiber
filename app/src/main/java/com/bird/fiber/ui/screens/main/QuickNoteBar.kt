@@ -61,6 +61,7 @@ import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 @Composable
 fun QuickNoteBar(
@@ -133,7 +134,7 @@ fun QuickNoteBar(
         ) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = LocalFiberSurfaceColors.current.searchInput,
                 border = BorderStroke(
                     width = if (isInputFocused) 2.dp else 1.dp,
                     color = if (isInputFocused) {
@@ -226,8 +227,8 @@ fun QuickNoteBar(
                         .size(32.dp),
                     enabled = !isContentEmpty && !isSaving && !isAddingImage,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 ) {
                     if (isSaving) {

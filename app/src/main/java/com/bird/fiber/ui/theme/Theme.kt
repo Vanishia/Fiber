@@ -3,10 +3,14 @@ package com.bird.fiber.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 
@@ -29,9 +33,47 @@ fun FiberTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = fiberTypography((fontSizeScale * 100).toInt()),
-        content = content
+    val surfaceColors = remember(colorScheme, darkTheme) {
+        fiberSurfaceColors(colorScheme, darkTheme)
+    }
+
+    CompositionLocalProvider(LocalFiberSurfaceColors provides surfaceColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = fiberTypography((fontSizeScale * 100).toInt()),
+            content = content
+        )
+    }
+}
+
+internal data class FiberSurfaceColors(
+    val pageBackground: Color,
+    val contentCard: Color,
+    val topBar: Color,
+    val searchInput: Color
+)
+
+internal fun fiberSurfaceColors(
+    colorScheme: ColorScheme,
+    darkTheme: Boolean
+): FiberSurfaceColors {
+    val pageBackground = if (darkTheme) {
+        colorScheme.surface
+    } else {
+        colorScheme.surfaceContainerLow
+    }
+    return FiberSurfaceColors(
+        pageBackground = pageBackground,
+        contentCard = if (darkTheme) {
+            colorScheme.surfaceContainerLow
+        } else {
+            colorScheme.surfaceContainerLowest
+        },
+        topBar = pageBackground,
+        searchInput = colorScheme.surfaceContainerHigh
     )
+}
+
+internal val LocalFiberSurfaceColors = staticCompositionLocalOf<FiberSurfaceColors> {
+    error("Fiber surface colors are not available outside FiberTheme")
 }

@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.BuildConfig
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -59,6 +60,7 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         topBar = {
             TopAppBar(
                 title = { Text("设置") },

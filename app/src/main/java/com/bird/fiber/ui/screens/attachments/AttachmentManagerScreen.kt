@@ -75,6 +75,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.load
 import com.bird.fiber.data.model.ManagedAttachment
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt
@@ -102,6 +103,7 @@ fun AttachmentManagerScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(

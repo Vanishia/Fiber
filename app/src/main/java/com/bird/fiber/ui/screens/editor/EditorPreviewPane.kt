@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.image.AsyncDrawableScheduler
 
@@ -58,7 +59,7 @@ private fun MarkdownPreview(
     val bodyStyle = MaterialTheme.typography.bodyLarge
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
-    val backgroundColor = MaterialTheme.colorScheme.background.toArgb()
+    val backgroundColor = LocalFiberSurfaceColors.current.pageBackground.toArgb()
     val textSizePx = with(density) { bodyStyle.fontSize.toPx() }
     val topInsetPx = with(density) { topContentInset.roundToPx() }
     val bottomInsetPx = with(density) { (bottomContentInset + 12.dp).roundToPx() }

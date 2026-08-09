@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -26,7 +27,7 @@ internal fun EditorContentHost(
     bottomContentInset: Dp,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = MaterialTheme.colorScheme.background
+    val backgroundColor = LocalFiberSurfaceColors.current.pageBackground
     val contentModifier = modifier
         .fillMaxSize()
         .padding(horizontal = 16.dp)

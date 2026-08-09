@@ -1,6 +1,5 @@
 package com.bird.fiber.ui.screens.search
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 @Composable
 internal fun SearchHeader(
@@ -48,17 +48,13 @@ internal fun SearchHeader(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isSystemInDarkTheme()) {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
+                containerColor = LocalFiberSurfaceColors.current.topBar
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                color = LocalFiberSurfaceColors.current.topBar,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
                 shape = RoundedCornerShape(28.dp)

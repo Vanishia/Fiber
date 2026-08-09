@@ -1,6 +1,6 @@
 package com.bird.fiber.ui.screens.filelist.components
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
 
 @Composable
@@ -208,12 +209,9 @@ fun FileListSkeleton(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isSystemInDarkTheme()) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLowest
-                    }
+                    containerColor = LocalFiberSurfaceColors.current.contentCard
                 ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
@@ -373,17 +371,13 @@ private fun FloatingTopAppBar(
             modifier = Modifier.fillMaxWidth(),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isSystemInDarkTheme()) {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
+                containerColor = LocalFiberSurfaceColors.current.topBar
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                color = LocalFiberSurfaceColors.current.topBar,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)

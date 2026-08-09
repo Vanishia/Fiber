@@ -1,5 +1,6 @@
 package com.bird.fiber.ui.screens.search
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
 
 @Composable
@@ -164,8 +166,9 @@ private fun SearchSummaryCard(
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+            containerColor = LocalFiberSurfaceColors.current.contentCard
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(

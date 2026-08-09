@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 /**
  * 搜索页面
@@ -66,6 +67,7 @@ fun SearchScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Box(

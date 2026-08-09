@@ -1,8 +1,8 @@
 package com.bird.fiber.ui.screens.filelist.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.bird.fiber.data.config.PreviewConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.utils.FileUtils
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 /**
  * 判断文件名是否为快速笔记的日期格式（yy-mm-dd_hh-mm-ss）
@@ -71,12 +72,9 @@ fun FileListItem(
                     onLongClick = onLongClick
                 ),
             colors = CardDefaults.cardColors(
-                containerColor = if (isSystemInDarkTheme()) {
-                    MaterialTheme.colorScheme.surfaceContainerLow
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerLowest
-                }
+                containerColor = LocalFiberSurfaceColors.current.contentCard
             ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
@@ -94,7 +92,7 @@ fun FileListItem(
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -122,14 +120,14 @@ fun FileListItem(
                     Text(
                         text = FileUtils.formatDate(file.lastModified),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
-                        color = MaterialTheme.colorScheme.outline
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     if (file.hasImage) {
                         Icon(
                             imageVector = Icons.Default.Image,
                             contentDescription = "包含图片",
-                            tint = MaterialTheme.colorScheme.outline,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                     }

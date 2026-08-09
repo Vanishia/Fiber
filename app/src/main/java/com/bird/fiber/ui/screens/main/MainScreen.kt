@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.ui.screens.filelist.FileListScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteUiState
 import com.bird.fiber.ui.screens.quicknote.QuickNoteViewModel
+import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import com.bird.fiber.ui.screens.sidebar.SidebarContent
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -173,6 +174,7 @@ private fun MainScreenLayout(
 ) {
     Scaffold(
         modifier = modifier,
+        containerColor = LocalFiberSurfaceColors.current.pageBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Column(
