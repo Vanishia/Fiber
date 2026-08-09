@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.noties.markwon.image.AsyncDrawableScheduler
 
 @Composable
 internal fun EditorPreviewPane(
@@ -102,7 +103,9 @@ private fun MarkdownPreview(
 
             // 内容变化时更新文本（引用相等性检查，Spanned 不可变所以安全）
             if (lastRenderedText !== renderedMarkdown) {
+                AsyncDrawableScheduler.unschedule(textView)
                 textView.text = renderedMarkdown ?: ""
+                AsyncDrawableScheduler.schedule(textView)
                 lastRenderedText = renderedMarkdown
                 needsLayout = true
             }
