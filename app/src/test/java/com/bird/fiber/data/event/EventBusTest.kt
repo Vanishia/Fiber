@@ -98,6 +98,7 @@ class EventBusTest {
             AppEvent.FileDeleted("file://test2.md"),
             AppEvent.FileUpdated("file://test3.md"),
             AppEvent.SyncStarted("lib1"),
+            AppEvent.SyncProgress("lib1", 2, 10),
             AppEvent.SyncCompleted("lib1")
         )
 
@@ -123,6 +124,11 @@ class EventBusTest {
             val syncStarted = awaitItem()
             assertTrue(syncStarted is AppEvent.SyncStarted)
             assertEquals("lib1", (syncStarted as AppEvent.SyncStarted).libraryId)
+
+            val syncProgress = awaitItem()
+            assertTrue(syncProgress is AppEvent.SyncProgress)
+            assertEquals(2, (syncProgress as AppEvent.SyncProgress).processed)
+            assertEquals(10, syncProgress.total)
 
             val syncCompleted = awaitItem()
             assertTrue(syncCompleted is AppEvent.SyncCompleted)
@@ -174,6 +180,7 @@ class EventBusTest {
         assertTrue(AppEvent.FileDeleted("uri") is AppEvent)
         assertTrue(AppEvent.FileUpdated("uri") is AppEvent)
         assertTrue(AppEvent.SyncStarted("lib") is AppEvent)
+        assertTrue(AppEvent.SyncProgress("lib", 1, 2) is AppEvent)
         assertTrue(AppEvent.SyncCompleted("lib") is AppEvent)
     }
 

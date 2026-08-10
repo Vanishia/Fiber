@@ -13,6 +13,8 @@ import com.bird.fiber.data.model.MarkdownFileMeta
 data class FileListUiState(
     val isLoading: Boolean = false,                    // 加载状态
     val isSyncing: Boolean = false,                    // 是否正在同步文件
+    val syncProcessed: Int = 0,                        // 已处理文件数
+    val syncTotal: Int? = null,                        // 待处理文件总数，扫描完成前为空
     val currentFolderUri: String? = null,              // 当前选择的文件夹URI
     val selectedFile: MarkdownFileMeta? = null,        // 当前选中的文件
     val error: String? = null,                         // 错误信息

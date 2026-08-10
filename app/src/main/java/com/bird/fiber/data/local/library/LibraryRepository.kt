@@ -36,6 +36,10 @@ class LibraryRepository(
         return libraryDao.getLibraryById(libraryId)
     }
 
+    suspend fun getLibraryByFolderUri(folderUri: String): LibraryEntity? {
+        return libraryDao.getLibraryByFolderUri(folderUri)
+    }
+
     /**
      * 添加新库
      */
@@ -54,18 +58,27 @@ class LibraryRepository(
      * 删除库并释放对应的 URI 权限
      */
     suspend fun deleteLibrary(library: LibraryEntity, contentResolver: ContentResolver) {
-        try {
-            // 释放持久化的 URI 权限
-            val uri = Uri.parse(library.folderUri)
-            val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                       android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val shouldReleasePermission = try {
+            libraryDao.countOtherLibrariesByFolderUri(library.folderUri, library.id) == 0
+        } catch (e: Exception) {
+            Timber.e(e, "检查重复库绑定失败，保留 URI 权限")
+            false
+        }
 
-            // 检查是否有这个权限，有的话释放它
-            contentResolver.persistedUriPermissions.forEach { permission ->
-                if (permission.uri == uri) {
-                    contentResolver.releasePersistableUriPermission(uri, flags)
-                    Timber.d("已释放 URI 权限: ${library.name}")
+        try {
+            if (shouldReleasePermission) {
+                val uri = Uri.parse(library.folderUri)
+                val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+
+                contentResolver.persistedUriPermissions.forEach { permission ->
+                    if (permission.uri == uri) {
+                        contentResolver.releasePersistableUriPermission(uri, flags)
+                        Timber.d("已释放 URI 权限: ${library.name}")
+                    }
                 }
+            } else {
+                Timber.w("检测到相同 URI 的其他库记录，保留 URI 权限: ${library.name}")
             }
         } catch (e: Exception) {
             Timber.e(e, "释放 URI 权限失败")

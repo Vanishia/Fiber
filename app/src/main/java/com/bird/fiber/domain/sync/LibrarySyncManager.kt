@@ -37,47 +37,59 @@ class LibrarySyncManager @Inject constructor(
         folderName: String,
         folderUriString: String
     ): LibraryEntity {
-        val newLibrary = LibraryEntity(
+        val existingLibrary = libraryRepository.getLibraryByFolderUri(folderUriString)
+        val library = existingLibrary ?: LibraryEntity(
             id = UUID.randomUUID().toString(),
             name = folderName,
             folderUri = folderUriString,
             createdAt = System.currentTimeMillis(),
             lastOpenedAt = System.currentTimeMillis(),
             isActive = false
-        )
+        ).also { libraryRepository.addLibrary(it) }
 
-        libraryRepository.addLibrary(newLibrary)
-        libraryRepository.switchLibrary(newLibrary.id)
+        if (existingLibrary != null) {
+            Timber.d("LibrarySyncManager: reuse existing library id=%s name=%s", library.id, library.name)
+        }
+        libraryRepository.switchLibrary(library.id)
 
-        eventBus.emit(AppEvent.SyncStarted(newLibrary.id))
+        eventBus.emit(AppEvent.SyncStarted(library.id))
 
         withContext(Dispatchers.IO) {
-            Timber.d("LibrarySyncManager: start sync new library=%s", newLibrary.name)
+            Timber.d("LibrarySyncManager: start sync selected library=%s", library.name)
             when (val result = fileIndexer.syncLibrary(
                 contentResolver = contentResolver,
-                libraryId = newLibrary.id,
+                libraryId = library.id,
                 folderUri = folderUriString,
-                reason = "new-library"
+                reason = if (existingLibrary == null) "new-library" else "existing-library",
+                onProgress = { current, total ->
+                    eventBus.tryEmit(
+                        AppEvent.SyncProgress(
+                            libraryId = library.id,
+                            processed = current,
+                            total = total
+                        )
+                    )
+                }
             )) {
                 is SyncResult.Success -> {
                     Timber.d(
-                        "LibrarySyncManager: new library sync done name=%s inserted=%s updated=%s deleted=%s",
-                        newLibrary.name,
+                        "LibrarySyncManager: selected library sync done name=%s inserted=%s updated=%s deleted=%s",
+                        library.name,
                         result.inserted,
                         result.updated,
                         result.deleted
                     )
                 }
                 is SyncResult.Failure -> {
-                    logSyncFailure("LibrarySyncManager: new library sync failed name=${newLibrary.name}", result.error)
+                    logSyncFailure("LibrarySyncManager: selected library sync failed name=${library.name}", result.error)
                 }
             }
         }
 
-        eventBus.emit(AppEvent.SyncCompleted(newLibrary.id))
+        eventBus.emit(AppEvent.SyncCompleted(library.id))
         eventBus.emit(AppEvent.RefreshFileList)
 
-        return newLibrary
+        return library
     }
 
     suspend fun syncAllLibraries(

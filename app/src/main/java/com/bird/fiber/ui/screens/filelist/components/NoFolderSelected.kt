@@ -49,8 +49,14 @@ fun NoFolderSelected(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "请选择一个文件夹作为笔记目录",
+            text = "请选择一个本地文件夹作为笔记库",
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "笔记将以 Markdown 文件保存在所选文件夹中",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(24.dp))

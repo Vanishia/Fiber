@@ -204,7 +204,7 @@ class FileIndexerTest {
         assertEquals(0, result.inserted)
         assertEquals(1, result.updated)
         assertEquals(0, result.deleted)
-        assertEquals(listOf(1 to 1), progress)
+        assertEquals(listOf(0 to 1, 1 to 1), progress)
 
         coVerify(exactly = 1) { writer.upsertBatch(any()) }
         coVerify(exactly = 1) { writer.deleteMissing(any()) }

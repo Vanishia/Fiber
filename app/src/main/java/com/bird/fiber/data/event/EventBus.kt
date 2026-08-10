@@ -41,4 +41,8 @@ class EventBus @Inject constructor() {
     suspend fun emit(event: AppEvent) {
         _events.emit(event)
     }
+
+    fun tryEmit(event: AppEvent): Boolean {
+        return _events.tryEmit(event)
+    }
 }

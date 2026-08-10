@@ -187,12 +187,27 @@ class FileListViewModel @Inject constructor(
 
                     is AppEvent.SyncStarted -> {
                         Timber.d("FileListViewModel: sync started ${event.libraryId}")
-                        _uiState.value = _uiState.value.copy(isSyncing = true)
+                        _uiState.value = _uiState.value.copy(
+                            isSyncing = true,
+                            syncProcessed = 0,
+                            syncTotal = null
+                        )
+                    }
+
+                    is AppEvent.SyncProgress -> {
+                        _uiState.value = _uiState.value.copy(
+                            syncProcessed = event.processed,
+                            syncTotal = event.total
+                        )
                     }
 
                     is AppEvent.SyncCompleted -> {
                         Timber.d("FileListViewModel: sync completed ${event.libraryId}")
-                        _uiState.value = _uiState.value.copy(isSyncing = false)
+                        _uiState.value = _uiState.value.copy(
+                            isSyncing = false,
+                            syncProcessed = 0,
+                            syncTotal = null
+                        )
                     }
                 }
             }

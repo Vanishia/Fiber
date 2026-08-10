@@ -63,6 +63,7 @@ class FileIndexer internal constructor(
                 )
 
                 val plan = syncPlanner.plan(filesFromSystem, filesInDatabase)
+                onProgress?.invoke(0, plan.entriesToUpsert.size)
 
                 if (shouldGuardMassDeletion(filesFromSystem, filesInDatabase, plan.deletedUris)) {
                     Timber.w(

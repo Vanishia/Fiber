@@ -105,6 +105,16 @@ class LibraryRepositoryTest {
         assertEquals("测试库", result?.name)
     }
 
+    @Test
+    fun getLibraryByFolderUri_returnsExistingLibrary() = runTest {
+        val library = LibraryEntity("1", "测试库", "content://folder", 1000, 2000, true)
+        coEvery { libraryDao.getLibraryByFolderUri("content://folder") } returns library
+
+        val result = repository.getLibraryByFolderUri("content://folder")
+
+        assertSame(library, result)
+    }
+
     // ==================== 库管理测试 ====================
 
     @Test
@@ -149,6 +159,19 @@ class LibraryRepositoryTest {
     }
 
     // ==================== 删除库测试 ====================
+
+    @Test
+    fun deleteLibrary_sharedFolderUri_keepsPersistedPermission() = runTest {
+        val library = LibraryEntity("1", "重复库", "content://folder", 1000, 2000, true)
+        coEvery {
+            libraryDao.countOtherLibrariesByFolderUri("content://folder", "1")
+        } returns 1
+
+        repository.deleteLibrary(library, contentResolver)
+
+        verify(exactly = 0) { contentResolver.persistedUriPermissions }
+        coVerify { libraryDao.deleteLibrary(library) }
+    }
 
     @Test
     fun deleteLibraryById_deletesFromDao() = runTest {

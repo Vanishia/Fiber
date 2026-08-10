@@ -30,6 +30,12 @@ interface LibraryDao {
     @Query("SELECT * FROM libraries WHERE id = :libraryId")
     suspend fun getLibraryById(libraryId: String): LibraryEntity?
 
+    @Query("SELECT * FROM libraries WHERE folderUri = :folderUri LIMIT 1")
+    suspend fun getLibraryByFolderUri(folderUri: String): LibraryEntity?
+
+    @Query("SELECT COUNT(*) FROM libraries WHERE folderUri = :folderUri AND id != :libraryId")
+    suspend fun countOtherLibrariesByFolderUri(folderUri: String, libraryId: String): Int
+
     /**
      * 插入新库
      * @return 新插入行的行 ID

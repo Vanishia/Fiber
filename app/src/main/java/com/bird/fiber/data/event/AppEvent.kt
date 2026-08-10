@@ -37,6 +37,12 @@ sealed class AppEvent {
      */
     data class SyncStarted(val libraryId: String) : AppEvent()
 
+    data class SyncProgress(
+        val libraryId: String,
+        val processed: Int,
+        val total: Int
+    ) : AppEvent()
+
     /**
      * 同步库完成
      */

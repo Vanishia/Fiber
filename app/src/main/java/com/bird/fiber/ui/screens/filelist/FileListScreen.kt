@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -140,11 +141,33 @@ fun FileListScreen(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator()
+                        val total = uiState.syncTotal
+                        if (total != null && total > 0) {
+                            LinearProgressIndicator(
+                                progress = {
+                                    (uiState.syncProcessed.toFloat() / total).coerceIn(0f, 1f)
+                                },
+                                modifier = Modifier.width(240.dp)
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.width(240.dp))
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "正在同步文件...",
+                            text = if (total == null) {
+                                "正在扫描笔记库..."
+                            } else if (total > 0) {
+                                "正在导入笔记 ${uiState.syncProcessed} / $total"
+                            } else {
+                                "正在更新笔记索引..."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "笔记较多时可能需要一些时间",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
