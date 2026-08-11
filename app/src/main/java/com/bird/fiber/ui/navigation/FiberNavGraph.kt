@@ -1,10 +1,15 @@
 package com.bird.fiber.ui.navigation
 
 import android.net.Uri
+import android.os.SystemClock
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.navigation.NavHostController
@@ -30,8 +35,31 @@ fun FiberNavGraph(
     modifier: Modifier = Modifier
 ) {
     val backgroundColor = MaterialTheme.colorScheme.background
+    var lastUserNavigationAt by remember { mutableLongStateOf(0L) }
+
+    fun acceptUserNavigation(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastUserNavigationAt < USER_NAVIGATION_DEBOUNCE_MS) {
+            return false
+        }
+        lastUserNavigationAt = now
+        return true
+    }
+
+    fun navigateFromUser(route: String) {
+        if (acceptUserNavigation()) {
+            navController.navigateSafely(route)
+        }
+    }
+
+    fun popFromUser() {
+        if (acceptUserNavigation()) {
+            navController.popBackStackSafely()
+        }
+    }
+
     val navigateToEditor: (String, Boolean) -> Unit = { fileUri, editMode ->
-        navController.navigate(FiberRoute.editor(fileUri, editMode))
+        navigateFromUser(FiberRoute.editor(fileUri, editMode))
     }
 
     SharedTransitionLayout {
@@ -46,10 +74,10 @@ fun FiberNavGraph(
                 onFileClick = navigateToEditor,
                 onSelectFolder = onSelectFolder,
                 onAddLibrary = onAddLibrary,
-                onSearchClick = { navController.navigate(FiberRoute.SEARCH) },
-                onSettingsClick = { navController.navigate(FiberRoute.SETTINGS) },
+                onSearchClick = { navigateFromUser(FiberRoute.SEARCH) },
+                onSettingsClick = { navigateFromUser(FiberRoute.SETTINGS) },
                 onManageAttachments = { libraryId ->
-                    navController.navigate(FiberRoute.attachments(libraryId))
+                    navigateFromUser(FiberRoute.attachments(libraryId))
                 },
                 topBarModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
@@ -78,21 +106,21 @@ fun FiberNavGraph(
 
             EditorScreen(
                 fileUri = fileUri,
-                onClose = { navController.popBackStack() },
+                onClose = ::popFromUser,
                 initialPreviewMode = initialPreviewMode
             )
         }
 
         composable(route = FiberRoute.QUICKNOTE) {
             QuickNoteScreen(
-                onClose = { navController.popBackStack() },
-                onSaveSuccess = { navController.popBackStack() }
+                onClose = ::popFromUser,
+                onSaveSuccess = ::popFromUser
             )
         }
 
         composable(route = FiberRoute.SEARCH) {
             SearchScreen(
-                onBackClick = { navController.popBackStack() },
+                onBackClick = ::popFromUser,
                 onFileClick = { fileUri -> navigateToEditor(fileUri, false) },
                 headerModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
@@ -103,7 +131,7 @@ fun FiberNavGraph(
 
         composable(route = FiberRoute.SETTINGS) {
             SettingsScreen(
-                onBackClick = { navController.popBackStack() }
+                onBackClick = ::popFromUser
             )
         }
 
@@ -114,10 +142,28 @@ fun FiberNavGraph(
             )
         ) {
             AttachmentManagerScreen(
-                onBackClick = { navController.popBackStack() }
+                onBackClick = ::popFromUser
             )
         }
         }
+    }
+}
+
+private fun NavHostController.navigateSafely(route: String) {
+    navigate(route) {
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.popBackStackSafely() {
+    val currentRoute = currentBackStackEntry?.destination?.route ?: return
+    if (currentRoute == FiberRoute.FILES) {
+        Timber.w("FiberNavGraph: ignored popBackStack on start destination")
+        return
+    }
+
+    if (!popBackStack()) {
+        Timber.w("FiberNavGraph: popBackStack returned false for route=%s", currentRoute)
     }
 }
 
@@ -127,7 +173,7 @@ private fun decodeFileUriOrPop(
 ): String? {
     if (encodedFileUri == null) {
         Timber.e("FiberNavGraph: missing encodedFileUri argument")
-        navController.popBackStack()
+        navController.popBackStackSafely()
         return null
     }
 
@@ -135,7 +181,7 @@ private fun decodeFileUriOrPop(
         UriHelper.decodeBase64(encodedFileUri)
     } catch (e: Exception) {
         Timber.e(e, "FiberNavGraph: failed to decode encodedFileUri=%s", encodedFileUri)
-        navController.popBackStack()
+        navController.popBackStackSafely()
         null
     }
 }
@@ -164,3 +210,5 @@ object FiberRoute {
 
     fun attachments(libraryId: String): String = "attachments/${Uri.encode(libraryId)}"
 }
+
+private const val USER_NAVIGATION_DEBOUNCE_MS = 300L

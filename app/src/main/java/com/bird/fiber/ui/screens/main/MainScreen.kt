@@ -58,6 +58,23 @@ fun MainScreenContainer(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
+    fun openDrawerIfClosed() {
+        if (
+            drawerState.currentValue == DrawerValue.Closed &&
+            drawerState.targetValue == DrawerValue.Closed
+        ) {
+            scope.launch { drawerState.open() }
+        }
+    }
+
+    fun closeDrawerIfOpen() {
+        if (
+            drawerState.currentValue != DrawerValue.Closed ||
+            drawerState.targetValue != DrawerValue.Closed
+        ) {
+            scope.launch { drawerState.close() }
+        }
+    }
 
     MainScreenRoute(
         modifier = modifier,
@@ -74,9 +91,9 @@ fun MainScreenContainer(
         topBarModifier = topBarModifier,
         onLibrarySelected = { libraryId ->
             viewModel.onLibrarySelected(libraryId)
-            scope.launch { drawerState.close() }
+            closeDrawerIfOpen()
         },
-        onOpenDrawer = { scope.launch { drawerState.open() } },
+        onOpenDrawer = ::openDrawerIfClosed,
         onCopyContent = { clipboardManager.setText(AnnotatedString(it)) },
         onListScroll = { focusManager.clearFocus() },
         onQuickNoteContentChange = { newValue ->
