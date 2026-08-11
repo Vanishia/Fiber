@@ -25,3 +25,8 @@
 -dontwarn com.caverock.androidsvg.SVG
 -dontwarn com.caverock.androidsvg.SVGParseException
 -dontwarn pl.droidsonroids.gif.GifDrawable
+
+# Markwon 4.6.2's image modules rely on callback objects that R8 can optimize
+# incorrectly when used through the legacy Coil 0.13 adapter. The symptom is
+# that release builds render only the Markdown image's alt text.
+-keep class io.noties.markwon.image.** { *; }
