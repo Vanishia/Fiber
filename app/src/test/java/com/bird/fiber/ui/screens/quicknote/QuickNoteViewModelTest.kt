@@ -360,30 +360,40 @@ class QuickNoteViewModelTest {
     }
 
     @Test
-    fun saveNote_afterLibrarySwitch_usesTargetLockedByFirstContent() = runTest {
-        val content = "属于 A 的草稿"
+    fun saveNote_afterLibrarySwitch_usesCurrentLibraryDraft() = runTest {
+        val draftA = "属于 A 的草稿"
+        val contentB = "属于 B 的笔记"
         coEvery {
-            createMarkdownFile(target = targetA, content = content, fileName = null)
+            createMarkdownFile(target = targetB, content = contentB, fileName = null)
         } returns FileResult.Success(
-            MarkdownFileMeta("content://test/library-a/note.md", "note", "note.md", 0L, 0L)
+            MarkdownFileMeta("content://test/library-b/note.md", "note", "note.md", 0L, 0L)
         )
 
-        viewModel.onContentChange(content)
+        viewModel.onContentChange(draftA)
         advanceUntilIdle()
         activeTarget.value = targetB
+        advanceUntilIdle()
+
+        assertEquals("", viewModel.uiState.value.content)
+
+        viewModel.onContentChange(contentB)
         viewModel.saveNote()
         advanceUntilIdle()
 
         coVerify(exactly = 1) {
-            createMarkdownFile(target = targetA, content = content, fileName = null)
+            createMarkdownFile(target = targetB, content = contentB, fileName = null)
         }
         coVerify(exactly = 0) {
-            createMarkdownFile(target = targetB, content = any(), fileName = any())
+            createMarkdownFile(target = targetA, content = any(), fileName = any())
         }
+
+        activeTarget.value = targetA
+        advanceUntilIdle()
+        assertEquals(draftA, viewModel.uiState.value.content)
     }
 
     @Test
-    fun saveNote_withAttachmentAfterLibrarySwitch_usesAttachmentTarget() = runTest {
+    fun saveNote_withAttachmentAfterLibrarySwitch_keepsAttachmentWithOriginalLibraryDraft() = runTest {
         val attachment = Attachment(
             displayName = "image.png",
             relativePath = "attachments/image.png",
@@ -393,14 +403,19 @@ class QuickNoteViewModelTest {
         coEvery { attachmentRepository.copyImage("content://source/image", targetA) } returns
             FileResult.Success(attachment)
         coEvery {
-            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
+            createMarkdownFile(target = targetB, content = "B 库文字", fileName = null)
         } returns FileResult.Success(
-            MarkdownFileMeta("content://test/library-a/note.md", "note", "note.md", 0L, 0L)
+            MarkdownFileMeta("content://test/library-b/note.md", "note", "note.md", 0L, 0L)
         )
 
         viewModel.addImage("content://source/image")
         advanceUntilIdle()
         activeTarget.value = targetB
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.attachments.isEmpty())
+
+        viewModel.onContentChange("B 库文字")
         viewModel.saveNote()
         advanceUntilIdle()
 
@@ -408,8 +423,12 @@ class QuickNoteViewModelTest {
             attachmentRepository.copyImage("content://source/image", targetA)
         }
         coVerify(exactly = 1) {
-            createMarkdownFile(target = targetA, content = "![图片](<attachments/image.png>)", fileName = null)
+            createMarkdownFile(target = targetB, content = "B 库文字", fileName = null)
         }
+
+        activeTarget.value = targetA
+        advanceUntilIdle()
+        assertEquals(listOf(attachment), viewModel.uiState.value.attachments)
     }
 
     @Test

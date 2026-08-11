@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
+import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
@@ -18,8 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -52,19 +51,31 @@ class QuickNoteViewModel @Inject constructor(
     private val _events = Channel<QuickNoteEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
-    private val draftTargetMutex = Mutex()
-    private var draftTarget: LibraryTarget? = null
-    private val pendingAttachmentUris = mutableSetOf<String>()
+    private var currentTarget: LibraryTarget? = null
+    private val draftsByLibraryId = mutableMapOf<String, QuickNoteDraft>()
+
+    init {
+        viewModelScope.launch {
+            fileRepository.currentLibraryTarget.collect { target ->
+                currentTarget = target
+                showDraftFor(target)
+            }
+        }
+    }
 
     /**
      * 更新输入内容
      */
     fun onContentChange(content: String) {
         Timber.d("QuickNoteViewModel: onContentChange('${_uiState.value.content}' -> '$content')")
-        val shouldLockTarget = _uiState.value.content.isBlank() && content.isNotBlank() && draftTarget == null
-        _uiState.value = _uiState.value.copy(content = content)
-        if (shouldLockTarget) {
-            viewModelScope.launch { resolveDraftTarget() }
+        val target = currentTarget
+        if (target == null) {
+            _uiState.value = _uiState.value.copy(content = content)
+            return
+        }
+
+        updateDraft(target.libraryId) { draft ->
+            draft.copy(content = content)
         }
     }
 
@@ -72,14 +83,22 @@ class QuickNoteViewModel @Inject constructor(
      * 清除错误信息
      */
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        val target = currentTarget
+        if (target == null) {
+            _uiState.value = _uiState.value.copy(error = null)
+            return
+        }
+
+        updateDraft(target.libraryId) { draft ->
+            draft.copy(error = null)
+        }
     }
 
     fun addImage(sourceUri: String) {
         if (_uiState.value.isAddingImage) return
+        val targetAtRequest = currentTarget
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
-            val target = resolveDraftTarget()
+            val target = targetAtRequest ?: resolveCurrentTarget()
             if (target == null) {
                 _uiState.value = _uiState.value.copy(
                     isAddingImage = false,
@@ -87,19 +106,28 @@ class QuickNoteViewModel @Inject constructor(
                 )
                 return@launch
             }
+            val libraryId = target.libraryId
+
+            updateDraft(libraryId) { draft ->
+                draft.copy(isAddingImage = true, error = null)
+            }
             when (val result = attachmentRepository.copyImage(sourceUri, target)) {
                 is FileResult.Success -> {
-                    pendingAttachmentUris += result.data.uri
-                    _uiState.value = _uiState.value.copy(
-                        attachments = _uiState.value.attachments + result.data,
-                        isAddingImage = false
-                    )
+                    updateDraft(libraryId) { draft ->
+                        draft.copy(
+                            attachments = draft.attachments + result.data,
+                            pendingAttachmentUris = draft.pendingAttachmentUris + result.data.uri,
+                            isAddingImage = false
+                        )
+                    }
                 }
                 is FileResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        isAddingImage = false,
-                        error = result.error.toUserMessage()
-                    )
+                    updateDraft(libraryId) { draft ->
+                        draft.copy(
+                            isAddingImage = false,
+                            error = result.error.toUserMessage()
+                        )
+                    }
                 }
                 is FileResult.Loading -> Unit
             }
@@ -107,16 +135,31 @@ class QuickNoteViewModel @Inject constructor(
     }
 
     fun removeAttachment(relativePath: String) {
-        val attachment = _uiState.value.attachments.firstOrNull { it.relativePath == relativePath }
-        _uiState.value = _uiState.value.copy(
-            attachments = _uiState.value.attachments.filterNot { it.relativePath == relativePath }
-        )
-        if (attachment != null && pendingAttachmentUris.remove(attachment.uri)) {
+        val target = currentTarget ?: return
+        val libraryId = target.libraryId
+        val draft = draftFor(libraryId)
+        val attachment = draft.attachments.firstOrNull { it.relativePath == relativePath }
+        val shouldDelete = attachment != null && attachment.uri in draft.pendingAttachmentUris
+
+        updateDraft(libraryId) {
+            it.copy(
+                attachments = it.attachments.filterNot { item -> item.relativePath == relativePath },
+                pendingAttachmentUris = if (attachment == null) {
+                    it.pendingAttachmentUris
+                } else {
+                    it.pendingAttachmentUris - attachment.uri
+                }
+            )
+        }
+
+        if (attachment != null && shouldDelete) {
             viewModelScope.launch {
                 when (val result = attachmentRepository.delete(attachment.uri)) {
                     is FileResult.Error -> {
                         Timber.e("QuickNoteViewModel: 删除附件失败，uri=${attachment.uri}, error=${result.error}")
-                        _uiState.value = _uiState.value.copy(error = result.error.toUserMessage())
+                        updateDraft(libraryId) { draft ->
+                            draft.copy(error = result.error.toUserMessage())
+                        }
                     }
                     is FileResult.Success,
                     is FileResult.Loading -> Unit
@@ -126,11 +169,17 @@ class QuickNoteViewModel @Inject constructor(
     }
 
     fun discardDraft(onComplete: (Boolean) -> Unit = {}) {
-        viewModelScope.launch {
-            val urisToDelete = pendingAttachmentUris.toList()
-            pendingAttachmentUris.clear()
+        val target = currentTarget
+        if (target == null) {
             _uiState.value = QuickNoteUiState()
-            draftTargetMutex.withLock { draftTarget = null }
+            onComplete(true)
+            return
+        }
+
+        val libraryId = target.libraryId
+        val urisToDelete = draftFor(libraryId).pendingAttachmentUris.toList()
+        clearDraft(libraryId)
+        viewModelScope.launch {
             onComplete(deleteAttachments(urisToDelete))
         }
     }
@@ -145,21 +194,26 @@ class QuickNoteViewModel @Inject constructor(
      * - 通过 Channel 通知 UI 层关闭页面
      */
     fun saveNote() {
-        if (_uiState.value.isSaving || _uiState.value.isAddingImage) return
-        val content = buildNoteContent(_uiState.value)
+        val stateAtSave = _uiState.value
+        if (stateAtSave.isSaving || stateAtSave.isAddingImage) return
+        val content = buildNoteContent(stateAtSave)
         if (content.isBlank()) return
+        val targetAtSave = currentTarget
         Timber.d("QuickNoteViewModel: saveNote() 被调用，当前 content = '$content'")
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true, error = null)
-
-            val target = resolveDraftTarget()
+            val target = targetAtSave ?: resolveCurrentTarget()
             if (target == null) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     error = "未选择笔记库，请先添加库"
                 )
                 return@launch
+            }
+            val libraryId = target.libraryId
+
+            updateDraft(libraryId) { draft ->
+                draft.copy(isSaving = true, error = null)
             }
 
             // 调用 UseCase 创建文件
@@ -173,13 +227,7 @@ class QuickNoteViewModel @Inject constructor(
                     eventBus.emit(AppEvent.FileCreated(result.data.uri))
 
                     // 清空输入框，保存完成
-                    _uiState.value = _uiState.value.copy(
-                        isSaving = false,
-                        content = "",
-                        attachments = emptyList()
-                    )
-                    pendingAttachmentUris.clear()
-                    draftTargetMutex.withLock { draftTarget = null }
+                    clearDraft(libraryId)
                     Timber.d("QuickNoteViewModel: content 已清空")
 
                     // 通过 Channel 通知 UI 层关闭页面
@@ -188,10 +236,12 @@ class QuickNoteViewModel @Inject constructor(
 
                 is FileResult.Error -> {
                     Timber.e("QuickNoteViewModel: 保存失败，error = ${result.error}")
-                    _uiState.value = _uiState.value.copy(
-                        isSaving = false,
-                        error = result.error.toUserMessage()
-                    )
+                    updateDraft(libraryId) { draft ->
+                        draft.copy(
+                            isSaving = false,
+                            error = result.error.toUserMessage()
+                        )
+                    }
                 }
 
                 is FileResult.Loading -> {
@@ -211,8 +261,45 @@ class QuickNoteViewModel @Inject constructor(
         }
     }
 
-    private suspend fun resolveDraftTarget(): LibraryTarget? = draftTargetMutex.withLock {
-        draftTarget ?: fileRepository.currentLibraryTarget.firstOrNull()?.also { draftTarget = it }
+    private suspend fun resolveCurrentTarget(): LibraryTarget? {
+        currentTarget?.let { return it }
+        return fileRepository.currentLibraryTarget.firstOrNull()?.also { target ->
+            currentTarget = target
+            showDraftFor(target)
+        }
+    }
+
+    private fun showDraftFor(target: LibraryTarget?) {
+        _uiState.value = target
+            ?.let { draftsByLibraryId[it.libraryId]?.toUiState() }
+            ?: QuickNoteUiState()
+    }
+
+    private fun draftFor(libraryId: String): QuickNoteDraft {
+        return draftsByLibraryId[libraryId] ?: QuickNoteDraft()
+    }
+
+    private fun updateDraft(
+        libraryId: String,
+        transform: (QuickNoteDraft) -> QuickNoteDraft
+    ) {
+        val updated = transform(draftFor(libraryId))
+        if (updated.isEmpty()) {
+            draftsByLibraryId.remove(libraryId)
+        } else {
+            draftsByLibraryId[libraryId] = updated
+        }
+
+        if (currentTarget?.libraryId == libraryId) {
+            _uiState.value = updated.toUiState()
+        }
+    }
+
+    private fun clearDraft(libraryId: String) {
+        draftsByLibraryId.remove(libraryId)
+        if (currentTarget?.libraryId == libraryId) {
+            _uiState.value = QuickNoteUiState()
+        }
     }
 
     private suspend fun deleteAttachments(uris: List<String>): Boolean {
@@ -228,6 +315,32 @@ class QuickNoteViewModel @Inject constructor(
             }
         }
         return allDeleted
+    }
+}
+
+private data class QuickNoteDraft(
+    val content: String = "",
+    val attachments: List<Attachment> = emptyList(),
+    val pendingAttachmentUris: Set<String> = emptySet(),
+    val isAddingImage: Boolean = false,
+    val isSaving: Boolean = false,
+    val error: String? = null
+) {
+    fun toUiState(): QuickNoteUiState = QuickNoteUiState(
+        content = content,
+        attachments = attachments,
+        isAddingImage = isAddingImage,
+        isSaving = isSaving,
+        error = error
+    )
+
+    fun isEmpty(): Boolean {
+        return content.isBlank() &&
+            attachments.isEmpty() &&
+            pendingAttachmentUris.isEmpty() &&
+            !isAddingImage &&
+            !isSaving &&
+            error == null
     }
 }
 
