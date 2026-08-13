@@ -190,30 +190,43 @@ class AttachmentRepositoryImpl @Inject constructor(
         try {
             val library = libraryRepository.getLibraryById(libraryId)
                 ?: return@withContext FileResult.Error(FileError.NotFound(libraryId))
-            val filesWithDestinations = MarkdownFileScanner().scan(
+
+            // 每个附件的旧式引用正则只编译一次
+            val matchers = attachments.map { attachment ->
+                AttachmentReferenceMatcher(
+                    attachment = attachment,
+                    legacyPattern = legacyReferencePattern(attachment.relativePath)
+                )
+            }
+            val references = attachments.associate { it.uri to mutableListOf<AttachmentReference>() }
+
+            // 流式比对：每次只在内存中保留一个 Markdown 文件的正文
+            MarkdownFileScanner().scan(
                 contentResolver = context.contentResolver,
                 folderUri = library.folderUri,
                 libraryId = libraryId
-            ).map { file ->
-                val content = readMarkdownContent(file.uri)
-                MarkdownAttachmentSource(
-                    fileUri = file.uri,
-                    fileName = file.name,
-                    content = content,
-                    destinations = MarkdownUtils.extractImageDestinations(content)
-                        .mapNotNull(::normalizeAttachmentPath)
-                        .toSet()
-                )
+            ).forEach { file ->
+                val content = try {
+                    readMarkdownContent(file.uri)
+                } catch (e: Exception) {
+                    Timber.w(e, "AttachmentRepository: skip unreadable file=%s", file.uri)
+                    return@forEach
+                }
+                val destinations = MarkdownUtils.extractImageDestinations(content)
+                    .mapNotNull(::normalizeAttachmentPath)
+                    .toSet()
+                matchers.forEach { matcher ->
+                    if (matcher.attachment.relativePath in destinations ||
+                        matcher.legacyPattern.containsMatchIn(content)
+                    ) {
+                        references.getValue(matcher.attachment.uri).add(
+                            AttachmentReference(fileUri = file.uri, fileName = file.name)
+                        )
+                    }
+                }
             }
 
-            FileResult.Success(
-                attachments.associate { attachment ->
-                    attachment.uri to findAttachmentReferences(
-                        relativePath = attachment.relativePath,
-                        filesWithDestinations = filesWithDestinations
-                    )
-                }
-            )
+            FileResult.Success(references)
         } catch (e: SecurityException) {
             Timber.e(e, "AttachmentRepository: references permission denied library=%s", libraryId)
             FileResult.Error(FileError.PermissionDenied(libraryId))
@@ -354,13 +367,15 @@ internal fun normalizeAttachmentPath(destination: String): String? {
     }
 }
 
+internal fun legacyReferencePattern(relativePath: String): Regex = Regex(
+    """!\[[^]]*]\(\s*<?(?:\./)?${Regex.escape(relativePath)}>?(?:\s+[\"'][^\"']*[\"'])?\s*\)"""
+)
+
 internal fun findAttachmentReferences(
     relativePath: String,
     filesWithDestinations: List<MarkdownAttachmentSource>
 ): List<AttachmentReference> {
-    val legacyPattern = Regex(
-        """!\[[^]]*]\(\s*<?(?:\./)?${Regex.escape(relativePath)}>?(?:\s+[\"'][^\"']*[\"'])?\s*\)"""
-    )
+    val legacyPattern = legacyReferencePattern(relativePath)
     return filesWithDestinations.mapNotNull { file ->
         if (relativePath in file.destinations || legacyPattern.containsMatchIn(file.content)) {
             AttachmentReference(fileUri = file.fileUri, fileName = file.fileName)
@@ -375,6 +390,11 @@ internal data class MarkdownAttachmentSource(
     val fileName: String,
     val content: String,
     val destinations: Set<String>
+)
+
+private data class AttachmentReferenceMatcher(
+    val attachment: ManagedAttachment,
+    val legacyPattern: Regex
 )
 
 internal object AttachmentFileNameGenerator {

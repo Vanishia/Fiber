@@ -97,6 +97,82 @@ class FileRepositoryImplTest {
         verify(exactly = 1) { DocumentsContract.deleteDocument(contentResolver, newFileUri) }
     }
 
+    @Test
+    fun deleteFile_providerReturnsTrue_deletesIndex() = runTest {
+        val fileUriString = "content://documents/library-a/note.md"
+        val fileUri = mockk<Uri>()
+        every { Uri.parse(fileUriString) } returns fileUri
+        every { DocumentsContract.deleteDocument(contentResolver, fileUri) } returns true
+
+        val result = repository.deleteFile(fileUriString)
+
+        assertTrue(result.toString(), result is FileResult.Success)
+        coVerify(exactly = 1) { fileIndexer.deleteFile(fileUriString) }
+    }
+
+    @Test
+    fun deleteFile_providerReturnsFalse_keepsIndexAndReturnsError() = runTest {
+        val fileUriString = "content://documents/library-a/note.md"
+        val fileUri = mockk<Uri>()
+        every { Uri.parse(fileUriString) } returns fileUri
+        every { DocumentsContract.deleteDocument(contentResolver, fileUri) } returns false
+
+        val result = repository.deleteFile(fileUriString)
+
+        assertTrue(result is FileResult.Error)
+        coVerify(exactly = 0) { fileIndexer.deleteFile(any()) }
+    }
+
+    @Test
+    fun renameFile_reindexesIntoOriginalIndexedLibrary() = runTest {
+        val fileUriString = "content://documents/library-a/note.md"
+        val fileUri = mockk<Uri>()
+        val renamedUri = mockk<Uri>()
+        val renamedUriString = "content://documents/library-a/renamed.md"
+        val libraryA = LibraryEntity(
+            id = "library-a",
+            name = "A",
+            folderUri = "content://tree/library-a",
+            createdAt = 0L,
+            isActive = false
+        )
+        every { Uri.parse(fileUriString) } returns fileUri
+        every { renamedUri.toString() } returns renamedUriString
+        every { DocumentsContract.renameDocument(contentResolver, fileUri, "renamed.md") } returns renamedUri
+        coEvery { fileIndexer.getIndexedLibraryId(fileUriString) } returns "library-a"
+        coEvery { libraryRepository.getLibraryById("library-a") } returns libraryA
+
+        val result = repository.renameFile(fileUriString, "renamed")
+
+        assertTrue(result.toString(), result is FileResult.Success)
+        coVerify(exactly = 1) { fileIndexer.deleteFile(fileUriString) }
+        coVerify(exactly = 1) {
+            fileIndexer.insertFile(contentResolver, "library-a", "content://tree/library-a", renamedUriString)
+        }
+        coVerify(exactly = 0) {
+            fileIndexer.insertFile(contentResolver, "library-b", any(), any())
+        }
+    }
+
+    @Test
+    fun renameFile_notIndexed_fallsBackToActiveLibrary() = runTest {
+        val fileUriString = "content://documents/library-b/note.md"
+        val fileUri = mockk<Uri>()
+        val renamedUri = mockk<Uri>()
+        val renamedUriString = "content://documents/library-b/renamed.md"
+        every { Uri.parse(fileUriString) } returns fileUri
+        every { renamedUri.toString() } returns renamedUriString
+        every { DocumentsContract.renameDocument(contentResolver, fileUri, "renamed.md") } returns renamedUri
+        coEvery { fileIndexer.getIndexedLibraryId(fileUriString) } returns null
+
+        val result = repository.renameFile(fileUriString, "renamed")
+
+        assertTrue(result.toString(), result is FileResult.Success)
+        coVerify(exactly = 1) {
+            fileIndexer.insertFile(contentResolver, "library-b", activeLibraryB.folderUri, renamedUriString)
+        }
+    }
+
     private fun prepareDocumentCreation(output: ByteArrayOutputStream?): Pair<Uri, String> {
         val treeUri = mockk<Uri>()
         val documentUri = mockk<Uri>()

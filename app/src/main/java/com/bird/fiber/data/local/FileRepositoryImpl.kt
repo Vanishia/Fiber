@@ -143,7 +143,13 @@ class FileRepositoryImpl @Inject constructor(
         target = fileUri,
         action = "delete"
     ) {
-        DocumentsContract.deleteDocument(context.contentResolver, Uri.parse(fileUri))
+        val deleted = DocumentsContract.deleteDocument(context.contentResolver, Uri.parse(fileUri))
+        if (!deleted) {
+            // 底层文件没删掉时保留索引，避免列表和真实文件状态不一致
+            return@ioFileResult FileResult.Error(
+                FileError.IOFailed(fileUri, IllegalStateException("无法删除文档"))
+            )
+        }
         fileIndexer.deleteFile(fileUri)
         FileResult.Success(Unit)
     }
@@ -153,6 +159,8 @@ class FileRepositoryImpl @Inject constructor(
         action = "rename"
     ) {
         val finalFileName = ensureMarkdownExtension(newName)
+        // 重命名前先记录文件当前索引所属的库，避免跨库操作时把索引挂到活动库
+        val indexedLibraryId = fileIndexer.getIndexedLibraryId(fileUri)
         val renamedUri = DocumentsContract.renameDocument(
             context.contentResolver,
             Uri.parse(fileUri),
@@ -162,11 +170,13 @@ class FileRepositoryImpl @Inject constructor(
         )
 
         fileIndexer.deleteFile(fileUri)
-        libraryRepository.getActiveLibrary().firstOrNull()?.let { library ->
+        val library = indexedLibraryId?.let { libraryRepository.getLibraryById(it) }
+            ?: libraryRepository.getActiveLibrary().firstOrNull()
+        library?.let {
             fileIndexer.insertFile(
                 contentResolver = context.contentResolver,
-                libraryId = library.id,
-                rootFolderUri = library.folderUri,
+                libraryId = it.id,
+                rootFolderUri = it.folderUri,
                 fileUri = renamedUri.toString()
             )
         }

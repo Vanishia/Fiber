@@ -42,6 +42,15 @@ class RenderMarkdownUseCase @Inject constructor(
         return markwon.render(parsed)
     }
 
+    /**
+     * 把分块渲染的结果按顺序拼接为一个 Spanned，保留各块的样式和图片 span
+     */
+    fun concat(parts: List<Spanned>): Spanned {
+        val builder = android.text.SpannableStringBuilder()
+        parts.forEach { builder.append(it) }
+        return builder
+    }
+
     private fun resolveAttachmentReferences(content: String, markdownFileUri: String): String {
         return IMAGE_PATTERN.replace(content) { match ->
             val alt = match.groupValues[1]

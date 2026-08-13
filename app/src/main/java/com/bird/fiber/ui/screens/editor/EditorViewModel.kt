@@ -11,11 +11,14 @@ import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.utils.MarkdownChunker
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -274,7 +277,7 @@ class EditorViewModel : ViewModel {
         _renderState.value = _renderState.value.copy(isRendering = true)
         try {
             val rendered = withContext(renderDispatcher) {
-                renderMarkdownUseCase.render(request.content, request.fileUri)
+                renderContent(request)
             }
             _renderState.value = EditorRenderState(
                 renderedMarkdown = rendered,
@@ -285,6 +288,25 @@ class EditorViewModel : ViewModel {
         } catch (_: Exception) {
             _renderState.value = _renderState.value.copy(isRendering = false)
         }
+    }
+
+    /**
+     * 渲染预览内容。超过阈值的超大正文按块渲染再拼接，
+     * 把单次 Markwon 解析的内存峰值摊薄，块间也让出协程避免长时间占用
+     */
+    private suspend fun renderContent(request: RenderRequest): android.text.Spanned {
+        if (request.content.length <= LARGE_RENDER_THRESHOLD_CHARS) {
+            return renderMarkdownUseCase.render(request.content, request.fileUri)
+        }
+        val chunks = MarkdownChunker.split(request.content, RENDER_CHUNK_CHARS)
+        if (chunks.size <= 1) {
+            return renderMarkdownUseCase.render(request.content, request.fileUri)
+        }
+        val parts = chunks.map { chunk ->
+            currentCoroutineContext().ensureActive()
+            renderMarkdownUseCase.render(chunk, request.fileUri)
+        }
+        return renderMarkdownUseCase.concat(parts)
     }
 
     private var nextRenderSequence = 0L
@@ -298,5 +320,11 @@ class EditorViewModel : ViewModel {
 
     private companion object {
         const val RENDER_DEBOUNCE_MS = 400L
+
+        /** 超过约 1MB 的正文走分块渲染 */
+        const val LARGE_RENDER_THRESHOLD_CHARS = 1_000_000
+
+        /** 分块渲染时每块的目标大小（约 250KB） */
+        const val RENDER_CHUNK_CHARS = 250_000
     }
 }

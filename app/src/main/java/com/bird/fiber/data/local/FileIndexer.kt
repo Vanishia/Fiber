@@ -155,6 +155,13 @@ class FileIndexer internal constructor(
         }
     }
 
+    /**
+     * 查询文件当前索引所属的库 ID，用于重命名后在原库重建索引
+     */
+    suspend fun getIndexedLibraryId(fileUri: String): String? = withContext(Dispatchers.IO) {
+        markdownFileDao.getFileByUri(fileUri)?.libraryId
+    }
+
     suspend fun deleteFile(fileUri: String) = withContext(Dispatchers.IO) {
         withIndexLock(null, "file-delete-index") {
             try {
@@ -187,7 +194,9 @@ class FileIndexer internal constructor(
                         contentText = content,
                         hasImage = MarkdownUtils.containsImage(content),
                         lastModified = System.currentTimeMillis(),
-                        size = size ?: content.toByteArray().size.toLong()
+                        // 调用方未传 size 时保留旧值，避免为计算字节数再复制一次大正文；
+                        // 下次库同步会用文件系统的真实大小修正
+                        size = size ?: existingEntity.size
                     )
                 )
                 Timber.d("FileIndexer: updated file after save=%s", fileUri)

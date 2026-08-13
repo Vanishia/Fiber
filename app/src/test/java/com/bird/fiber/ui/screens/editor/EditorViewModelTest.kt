@@ -491,6 +491,43 @@ class EditorViewModelTest {
         assertEquals(content, viewModel.uiState.value.content)
     }
 
+    @Test
+    fun loadFile_largeContent_rendersInChunksAndConcatenates() = runTest {
+        // Arrange - 超过 1MB 阈值的正文，含空行作为安全切点
+        val fileUri = "content://test/large.md"
+        val content = buildString {
+            var index = 0
+            while (length <= 1_100_000) {
+                append("第 ").append(index++).append(" 段，用于填充超大文件的文本内容。\n\n")
+            }
+        }
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success(content)
+
+        // Act
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+
+        // Assert - 分块渲染多次，最后拼接一次
+        verify(atLeast = 2) { renderMarkdownUseCase.render(any(), any()) }
+        verify(exactly = 1) { renderMarkdownUseCase.concat(any()) }
+        assertEquals(false, viewModel.renderState.value.isRendering)
+    }
+
+    @Test
+    fun loadFile_smallContent_rendersWithoutChunking() = runTest {
+        // Arrange
+        val fileUri = "content://test/file.md"
+        coEvery { fileRepository.readFileContent(fileUri) } returns FileResult.Success("普通内容")
+
+        // Act
+        viewModel.loadFile(fileUri)
+        advanceUntilIdle()
+
+        // Assert
+        verify(exactly = 1) { renderMarkdownUseCase.render("普通内容", fileUri) }
+        verify(exactly = 0) { renderMarkdownUseCase.concat(any()) }
+    }
+
     private fun sessionAttachment() = Attachment(
         displayName = "diagram-20260809-153012-a1b2.png",
         relativePath = "attachments/diagram-20260809-153012-a1b2.png",

@@ -1,4 +1,4 @@
-﻿package com.bird.fiber.data.local
+package com.bird.fiber.data.local
 
 import android.content.ContentResolver
 import android.net.Uri
@@ -73,7 +73,7 @@ class FileIndexerTest {
     }
 
     @Test
-    fun updateFileAfterSave_usesPreviewReaderAndUpdatesEntity() = runTest {
+    fun updateFileAfterSave_withoutSize_keepsExistingSizeWithoutCopyingContent() = runTest {
         val updatedEntity = slot<MarkdownFileEntity>()
 
         val existing = entityFile(
@@ -96,7 +96,8 @@ class FileIndexerTest {
         assertEquals("file-uri", updatedEntity.captured.uri)
         assertEquals("new-preview", updatedEntity.captured.contentPreview)
         assertEquals("# title\nbody", updatedEntity.captured.contentText)
-        assertEquals("# title\nbody".toByteArray().size.toLong(), updatedEntity.captured.size)
+        // 未传 size 时保留旧值，等下次库同步用文件系统真实大小修正
+        assertEquals(10L, updatedEntity.captured.size)
     }
 
     @Test
