@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
@@ -42,6 +43,9 @@ fun SearchScreen(
     val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
     val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
+
+    // "随便看看"：当前随机命中的笔记，null 时弹窗不显示
+    var randomMemo by remember { mutableStateOf<MarkdownFileMeta?>(null) }
 
     val lazyPagingItems = viewModel.pager.collectAsLazyPagingItems()
     val density = LocalDensity.current
@@ -80,6 +84,9 @@ fun SearchScreen(
                     onQuickSearchClick = { query -> searchQuery = query },
                     scope = searchScope,
                     onScopeChange = viewModel::updateSearchScope,
+                    onRandomMemoClick = {
+                        viewModel.loadRandomMemo { memo -> randomMemo = memo }
+                    },
                     topPadding = contentTopPadding,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -101,6 +108,19 @@ fun SearchScreen(
                 onClearClick = { searchQuery = "" },
                 onBackClick = onBackClick,
                 modifier = headerModifier.align(Alignment.TopCenter)
+            )
+
+            // "随便看看"预览弹窗：点遮罩收起，复用搜索结果的跨库打开逻辑
+            RandomMemoSheet(
+                memo = randomMemo,
+                onDismiss = { randomMemo = null },
+                onNext = {
+                    viewModel.loadRandomMemo { memo -> randomMemo = memo }
+                },
+                onOpen = { memo ->
+                    randomMemo = null
+                    viewModel.openSearchResult(memo, onFileClick)
+                }
             )
         }
     }
