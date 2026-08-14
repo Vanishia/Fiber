@@ -1,5 +1,10 @@
 package com.bird.fiber.ui.screens.main
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -19,8 +24,12 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
@@ -213,18 +222,41 @@ private fun MainScreenLayout(
                     end = paddingValues.calculateEndPadding(LayoutDirection.Ltr)
                 )
         ) {
-            FileListScreen(
-                onFileClick = onFileClick,
-                onSelectFolder = onSelectFolder,
-                onChangeFolder = {},
-                onCopyContent = onCopyContent,
-                onMenuClick = onOpenDrawer,
-                onSearchClick = onSearchClick,
-                topBarModifier = topBarModifier,
-                currentLibraryName = currentLibraryName,
-                onListScroll = onListScroll,
-                modifier = Modifier.weight(1f)
+            // 快速笔记输入框聚焦时，给列表盖一层浅半透明遮罩，
+            // 弱化背景内容，点一下即收起（与长按菜单/抽屉的遮罩手感一致）
+            var isQuickNoteFocused by remember { mutableStateOf(false) }
+            val scrimAlpha by animateFloatAsState(
+                targetValue = if (isQuickNoteFocused) 1f else 0f,
+                animationSpec = tween(150),
+                label = "quickNoteScrimAlpha"
             )
+
+            Box(modifier = Modifier.weight(1f)) {
+                FileListScreen(
+                    onFileClick = onFileClick,
+                    onSelectFolder = onSelectFolder,
+                    onChangeFolder = {},
+                    onCopyContent = onCopyContent,
+                    onMenuClick = onOpenDrawer,
+                    onSearchClick = onSearchClick,
+                    topBarModifier = topBarModifier,
+                    currentLibraryName = currentLibraryName,
+                    onListScroll = onListScroll,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                if (scrimAlpha > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = scrimAlpha }
+                            .background(
+                                MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)
+                            )
+                            .clickable(enabled = isQuickNoteFocused) { onListScroll() },
+                    )
+                }
+            }
 
             QuickNoteBar(
                 content = quickNoteState.content,
@@ -236,7 +268,8 @@ private fun MainScreenLayout(
                 onImageSelected = onQuickNoteImageSelected,
                 onRemoveAttachment = onQuickNoteRemoveAttachment,
                 onDismissError = onQuickNoteDismissError,
-                onSaveClick = onQuickNoteSave
+                onSaveClick = onQuickNoteSave,
+                onInputFocusChange = { isQuickNoteFocused = it }
             )
         }
     }

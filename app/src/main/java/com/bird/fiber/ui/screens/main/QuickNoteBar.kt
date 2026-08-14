@@ -77,10 +77,15 @@ fun QuickNoteBar(
     onImageSelected: (String) -> Unit,
     onRemoveAttachment: (String) -> Unit,
     onDismissError: () -> Unit,
-    onSaveClick: () -> Unit
+    onSaveClick: () -> Unit,
+    onInputFocusChange: (Boolean) -> Unit = {}
 ) {
     val density = LocalDensity.current
     var isInputFocused by remember { mutableStateOf(false) }
+    fun applyFocus(focused: Boolean) {
+        isInputFocused = focused
+        onInputFocusChange(focused)
+    }
     var value by remember { mutableStateOf(TextFieldValue(content)) }
     var associationMenuExpanded by remember { mutableStateOf(false) }
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
@@ -170,7 +175,7 @@ fun QuickNoteBar(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onFocusChanged { isInputFocused = it.isFocused }
+                        .onFocusChanged { applyFocus(it.isFocused) }
                         .padding(
                             start = 16.dp,
                             top = 16.dp,
