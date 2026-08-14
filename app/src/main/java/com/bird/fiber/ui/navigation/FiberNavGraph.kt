@@ -4,6 +4,12 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -94,7 +100,25 @@ fun FiberNavGraph(
                     type = NavType.StringType
                     defaultValue = FiberRoute.MODE_PREVIEW
                 }
-            )
+            ),
+            // 打开笔记：编辑页轻微上滑并淡入，覆盖在列表之上；
+            // 返回时下滑淡出，重新露出列表。纯几何/透明度动画，日夜间模式体验一致。
+            enterTransition = {
+                fadeIn(animationSpec = tween(220)) +
+                    slideInVertically(
+                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                        initialOffsetY = { it / 12 }
+                    )
+            },
+            exitTransition = { fadeOut(animationSpec = tween(150)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(180)) },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(200)) +
+                    slideOutVertically(
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                        targetOffsetY = { it / 12 }
+                    )
+            }
         ) { backStackEntry ->
             val fileUri = decodeFileUriOrPop(
                 navController = navController,
