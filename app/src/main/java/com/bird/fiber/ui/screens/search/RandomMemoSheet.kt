@@ -8,10 +8,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
@@ -19,22 +25,37 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bird.fiber.data.config.PreviewConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.ui.screens.filelist.RandomMemo
 import com.bird.fiber.utils.FileUtils
 
 /**
- * "随便看看"预览弹窗——贴底弹出
+ * 快速笔记的自动命名——GenerateFileNameUseCase 生成的纯时间戳（yy-MM-dd_HH-mm-ss）
  *
- * 点遮罩收起；右下角"换一条"（主题色文字按钮）切换下一条随机笔记；
- * 长文出现"展开全文"，点一下进入那篇笔记的编辑器页面
+ * 这种文件名没有可读性，弹窗顶部不显示标题，直接从正文开始
+ */
+private val AUTO_NAME_PATTERN = Regex("""^\d{2}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$""")
+
+/** 正文实际渲染满 10 行视为长文，出现"展开"按钮 */
+private const val LONG_TEXT_MIN_LINES = 10
+
+/**
+ * "随机漫步"预览弹窗——贴底弹出
  *
- * @param memo 当前随机命中的笔记，null 表示库中暂时没有可用笔记
+ * 点遮罩收起；正文完整展示、内部可滚动；
+ * 渲染满 [LONG_TEXT_MIN_LINES] 行出现"展开"按钮，点一下进入那篇笔记的编辑器页面；
+ * 右下角灰色切换图标换下一条随机笔记
+ *
+ * @param memo 当前随机命中的笔记（含全文），null 表示库中暂时没有可用笔记
  * @param onDismiss 点击遮罩收起
  * @param onNext 换一条
  * @param onOpen 进入编辑器页面
@@ -42,7 +63,7 @@ import com.bird.fiber.utils.FileUtils
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RandomMemoSheet(
-    memo: MarkdownFileMeta?,
+    memo: RandomMemo?,
     onDismiss: () -> Unit,
     onNext: () -> Unit,
     onOpen: (MarkdownFileMeta) -> Unit,
@@ -67,37 +88,49 @@ fun RandomMemoSheet(
 
 @Composable
 private fun RandomMemoContent(
-    memo: MarkdownFileMeta,
+    memo: RandomMemo,
     onNext: () -> Unit,
     onOpen: (MarkdownFileMeta) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 预览达到上限说明还有更多内容，视为长文
-    val isLongText = memo.preview.length >= PreviewConfig.MAX_CHARS
+    val displayName = memo.meta.name.removeSuffix(".md")
+
+    // 阅读样式：正文比主屏幕列表大一号（bodyLarge），行间距再放宽一些
+    val bodyStyle = MaterialTheme.typography.bodyLarge.let { style ->
+        style.copy(lineHeight = style.fontSize * 1.6f)
+    }
+
+    // 用真实排版结果数行数，能正确处理自动换行、空行、长段落等情况；
+    // 换一条后重置，避免上一条的行数闪现"展开"按钮
+    var renderedLineCount by remember(memo) { mutableIntStateOf(0) }
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 24.dp)
     ) {
-        Text(
-            text = memo.name.removeSuffix(".md"),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        // 标题：快速笔记的自动命名不显示；颜色用主题色的深色调（onPrimaryContainer）
+        if (!AUTO_NAME_PATTERN.matches(displayName)) {
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         // 元信息：所属库 · 修改时间 · 路径
         val metaText = buildString {
-            if (memo.libraryName.isNotBlank()) {
-                append(memo.libraryName)
+            if (memo.meta.libraryName.isNotBlank()) {
+                append(memo.meta.libraryName)
                 append(" · ")
             }
-            append(FileUtils.formatDate(memo.lastModified))
-            if (memo.path.isNotBlank()) {
+            append(FileUtils.formatDate(memo.meta.lastModified))
+            if (memo.meta.path.isNotBlank()) {
                 append(" · ")
-                append(memo.path)
+                append(memo.meta.path)
             }
         }
         Text(
@@ -109,52 +142,54 @@ private fun RandomMemoContent(
             modifier = Modifier.padding(top = 2.dp)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // 正文预览，折叠为 3 行；长文通过"展开全文"进入编辑器阅读
-        if (memo.preview.isBlank()) {
+        // 正文全文，超长时在弹窗内滚动；短文时弹窗自适应收缩
+        if (memo.content.isBlank()) {
             Text(
                 text = "这条笔记是空的。",
-                style = MaterialTheme.typography.bodyMedium,
+                style = bodyStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
             Text(
-                text = memo.preview,
-                style = MaterialTheme.typography.bodyMedium,
+                text = memo.content,
+                style = bodyStyle,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = PreviewConfig.MAX_LINES,
-                overflow = TextOverflow.Ellipsis
+                onTextLayout = { renderedLineCount = it.lineCount },
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(scrollState)
             )
         }
 
-        // 底部操作行：长文显示"展开全文"，右下角固定"换一条"
+        // 底部操作行：长文显示"展开"，右下角固定灰色切换图标
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isLongText) {
+            if (renderedLineCount >= LONG_TEXT_MIN_LINES) {
                 TextButton(
-                    onClick = { onOpen(memo) },
+                    onClick = { onOpen(memo.meta) },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("展开全文")
+                    Text("展开")
                 }
-            } else {
-                Spacer(modifier = Modifier.width(8.dp))
             }
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(
+            IconButton(
                 onClick = onNext,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                )
+                modifier = Modifier.size(40.dp)
             ) {
-                Text("换一条")
+                Icon(
+                    imageVector = Icons.Default.Shuffle,
+                    contentDescription = "换一条",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
