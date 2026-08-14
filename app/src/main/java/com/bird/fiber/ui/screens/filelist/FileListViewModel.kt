@@ -17,6 +17,7 @@ import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
+import com.bird.fiber.data.repository.FileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -43,7 +44,8 @@ class FileListViewModel @Inject constructor(
     private val eventBus: EventBus,
     private val markdownFileDao: MarkdownFileDao,
     private val libraryRepository: LibraryRepository,
-    private val previewCache: PreviewCache
+    private val previewCache: PreviewCache,
+    private val fileRepository: FileRepository
 ) : ViewModel() {
 
     enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
@@ -117,16 +119,42 @@ class FileListViewModel @Inject constructor(
     }
 
     /**
-     * 全库随机抽取一条笔记（"随便看看"）
+     * 随机抽取一条笔记（"随机漫步"）
      *
-     * @param onResult 主线程回调，库中没有可用笔记时返回 null
+     * 抽取范围与搜索一致：全库或当前库，由搜索页的范围切换按钮控制；
+     * 命中后读取全文，弹窗直接展示完整内容
+     *
+     * @param scope 抽取范围，当前库模式下没有选中库时回调 null
+     * @param onResult 主线程回调，范围内没有可用笔记时返回 null
      */
-    fun loadRandomMemo(onResult: (MarkdownFileMeta?) -> Unit) {
+    fun loadRandomMemo(scope: SearchScope, onResult: (RandomMemo?) -> Unit) {
         viewModelScope.launch {
-            val summary = runCatching { markdownFileDao.getRandomFileSummary() }
+            val meta = runCatching {
+                if (scope == SearchScope.ALL_LIBRARIES) {
+                    markdownFileDao.getRandomFileSummary()
+                } else {
+                    val libraryId = _currentLibraryId.value
+                        ?: return@launch onResult(null)
+                    markdownFileDao.getRandomFileSummaryByLibrary(libraryId)
+                }
+            }
                 .onFailure { Timber.e(it, "Failed to load random memo") }
                 .getOrNull()
-            onResult(summary?.toMarkdownFileMeta())
+                ?.toMarkdownFileMeta()
+            if (meta == null) {
+                onResult(null)
+                return@launch
+            }
+
+            // 全文读取失败时退回预览，保证弹窗总有内容可显示
+            val content = runCatching { fileRepository.readFileContent(meta.uri) }
+                .onFailure { Timber.e(it, "Failed to read random memo content") }
+                .getOrNull()
+                ?.let { it as? FileResult.Success }
+                ?.data
+                ?: meta.preview
+
+            onResult(RandomMemo(meta, content))
         }
     }
 
@@ -374,3 +402,14 @@ class FileListViewModel @Inject constructor(
         val refreshVersion: Int
     )
 }
+
+/**
+ * "随机漫步"命中的笔记
+ *
+ * @property meta 笔记元信息（含所属库，供跨库打开编辑器使用）
+ * @property content 文件全文；读取失败时退回为预览摘要
+ */
+data class RandomMemo(
+    val meta: MarkdownFileMeta,
+    val content: String
+)
