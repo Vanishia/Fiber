@@ -117,7 +117,7 @@ internal fun EmptySearchContent(
 }
 
 /**
- * "随便看看"入口卡片——整卡可点击
+ * "随机漫步"入口卡片——整卡可点击
  *
  * 不需要关键词，从全库随机捞起一条记忆，
  * 让几万条碎片偶尔重新浮现
@@ -151,13 +151,13 @@ private fun RandomMemoEntryCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "随便看看",
+                    text = "随机漫步",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "从全库随机翻出一条旧碎片",
+                    text = "按上方搜索范围随机翻出一条旧碎片",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
