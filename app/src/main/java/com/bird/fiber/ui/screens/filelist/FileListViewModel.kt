@@ -55,6 +55,10 @@ class FileListViewModel @Inject constructor(
     private val _fileCreatedEvents = MutableSharedFlow<MarkdownFileMeta>(extraBufferCapacity = 1)
     val fileCreatedEvents = _fileCreatedEvents.asSharedFlow()
 
+    // 快速笔记保存成功后请求列表滚动到顶部，让新卡片出现在可视区域内
+    private val _scrollToTopEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val scrollToTopEvents = _scrollToTopEvents.asSharedFlow()
+
     private val _currentSearchQuery = MutableStateFlow("")
     private val _currentLibraryId = MutableStateFlow<String?>(null)
     private val _refreshVersion = MutableStateFlow(0)
@@ -180,8 +184,13 @@ class FileListViewModel @Inject constructor(
                 Timber.d("FileListViewModel: received event $event")
                 Timber.d("StartupTrace: FileListViewModel received event=${event::class.simpleName}")
                 when (event) {
+                    is AppEvent.FileCreated -> {
+                        triggerRefresh("event=${event::class.simpleName}")
+                        // 新建的文件排在列表最前，滚动到顶部让新卡片滑入可视区域
+                        _scrollToTopEvents.tryEmit(Unit)
+                    }
+
                     is AppEvent.RefreshFileList,
-                    is AppEvent.FileCreated,
                     is AppEvent.FileDeleted,
                     is AppEvent.FileUpdated -> triggerRefresh("event=${event::class.simpleName}")
 

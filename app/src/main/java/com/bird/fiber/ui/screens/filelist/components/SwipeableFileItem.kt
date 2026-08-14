@@ -61,12 +61,14 @@ object SwipeConfig {
  *
  * @param onSwipeLeft 左滑触发的回调（删除）
  * @param onSwipeRight 右滑触发的回调（编辑）
+ * @param modifier 作用于最外层容器（列表项动画等场景使用）
  * @param content 内容区域
  */
 @Composable
 fun SwipeableContainer(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
@@ -87,7 +89,7 @@ fun SwipeableContainer(
     var hasDecidedDirection by remember { mutableStateOf(false) }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize()
     ) {
         // 背景层（左侧编辑图标，右侧删除图标）
         Box(

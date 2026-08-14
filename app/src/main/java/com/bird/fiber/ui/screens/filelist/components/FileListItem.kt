@@ -65,10 +65,11 @@ fun FileListItem(
 
     SwipeableContainer(
         onSwipeLeft = onDelete,
-        onSwipeRight = onEdit
+        onSwipeRight = onEdit,
+        modifier = modifier
     ) {
         Card(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = onClick,

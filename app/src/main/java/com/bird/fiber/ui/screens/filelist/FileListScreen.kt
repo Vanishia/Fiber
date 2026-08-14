@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,6 +108,14 @@ fun FileListScreen(
     LaunchedEffect(Unit) {
         viewModel.fileCreatedEvents.collect { file ->
             onFileClick(file.uri, true)
+        }
+    }
+
+    // 快速笔记保存成功后滚动列表到顶部，配合新卡片的滑入动画
+    var scrollToTopSignal by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        viewModel.scrollToTopEvents.collect {
+            scrollToTopSignal++
         }
     }
 
@@ -211,6 +220,7 @@ fun FileListScreen(
                     onCreateClick = { showCreateFileDialog = true },
                     currentLibraryName = currentLibraryName,
                     onListScroll = onListScroll,
+                    scrollToTopSignal = scrollToTopSignal,
                     topBarModifier = topBarModifier,
                     modifier = Modifier.fillMaxSize(),
                 )

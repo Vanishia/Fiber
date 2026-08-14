@@ -17,6 +17,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.ui.screens.filelist.FileListScreen
+import com.bird.fiber.ui.screens.quicknote.QuickNoteEvent
 import com.bird.fiber.ui.screens.quicknote.QuickNoteUiState
 import com.bird.fiber.ui.screens.quicknote.QuickNoteViewModel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
@@ -58,6 +60,15 @@ fun MainScreenContainer(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
+
+    // 快速笔记保存成功后收起键盘，输入框随内容清空自动收起
+    LaunchedEffect(Unit) {
+        quickNoteViewModel.events.collect { event ->
+            when (event) {
+                QuickNoteEvent.SaveSuccess -> focusManager.clearFocus()
+            }
+        }
+    }
     fun openDrawerIfClosed() {
         if (
             drawerState.currentValue == DrawerValue.Closed &&

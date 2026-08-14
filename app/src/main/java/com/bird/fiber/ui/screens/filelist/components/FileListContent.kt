@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
@@ -91,6 +92,7 @@ fun FileListContent(
     onCreateClick: () -> Unit = {},
     currentLibraryName: String? = null,
     onListScroll: () -> Unit = {},
+    scrollToTopSignal: Int = 0,
     topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -151,7 +153,8 @@ fun FileListContent(
                         showLongPressMenu = true
                     },
                     topPadding = listTopPadding,
-                    onListScroll = onListScroll
+                    onListScroll = onListScroll,
+                    scrollToTopSignal = scrollToTopSignal
                 )
             }
         }
@@ -280,7 +283,8 @@ private fun FileList(
     onEditRequest: (String) -> Unit,
     onLongPress: (MarkdownFileMeta) -> Unit,
     topPadding: androidx.compose.ui.unit.Dp,
-    onListScroll: () -> Unit
+    onListScroll: () -> Unit,
+    scrollToTopSignal: Int = 0
 ) {
     val listState = rememberLazyListState()
     var lastScrollOffset by remember { mutableStateOf(0) }
@@ -295,13 +299,23 @@ private fun FileList(
             }
     }
 
+    // 新笔记创建后滚动回顶部，让新卡片的插入动画出现在可视区域内
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        items(lazyPagingItems.itemCount) { index ->
+        items(
+            count = lazyPagingItems.itemCount,
+            key = lazyPagingItems.itemKey { it.uri }
+        ) { index ->
             val file = lazyPagingItems[index]
             if (file != null) {
                 FileListItem(
@@ -310,7 +324,8 @@ private fun FileList(
                     onClick = { onFileClick(file.uri, false) },
                     onLongClick = { onLongPress(file) },
                     onDelete = { onDeleteRequest(file.name.removeSuffix(".md"), file.uri) },
-                    onEdit = { onEditRequest(file.uri) }
+                    onEdit = { onEditRequest(file.uri) },
+                    modifier = Modifier.animateItem()
                 )
             }
         }
