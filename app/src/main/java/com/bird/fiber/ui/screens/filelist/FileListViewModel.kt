@@ -116,6 +116,20 @@ class FileListViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 全库随机抽取一条笔记（"随便看看"）
+     *
+     * @param onResult 主线程回调，库中没有可用笔记时返回 null
+     */
+    fun loadRandomMemo(onResult: (MarkdownFileMeta?) -> Unit) {
+        viewModelScope.launch {
+            val summary = runCatching { markdownFileDao.getRandomFileSummary() }
+                .onFailure { Timber.e(it, "Failed to load random memo") }
+                .getOrNull()
+            onResult(summary?.toMarkdownFileMeta())
+        }
+    }
+
     fun onEvent(event: FileListEvent) {
         when (event) {
             is FileListEvent.SelectFolder -> {

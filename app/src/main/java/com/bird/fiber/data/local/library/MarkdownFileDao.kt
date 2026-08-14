@@ -204,4 +204,21 @@ interface MarkdownFileDao {
         LIMIT :limit
     """)
     suspend fun getRecentFiles(libraryId: String, limit: Int): List<MarkdownFileEntity>
+
+    /**
+     * 全库范围随机获取一条文件摘要（用于"随便看看"）
+     *
+     * 返回摘要而非完整实体，避免加载 content_text；
+     * ORDER BY RANDOM() 在几万条记录规模下开销可接受，
+     * 让沉底的旧碎片有均等机会重新浮现
+     */
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE is_deleted = 0
+        ORDER BY RANDOM()
+        LIMIT 1
+    """)
+    suspend fun getRandomFileSummary(): MarkdownFileSummary?
 }
