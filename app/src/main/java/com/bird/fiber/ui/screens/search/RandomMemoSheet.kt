@@ -2,6 +2,16 @@ package com.bird.fiber.ui.screens.search
 
 import android.graphics.Color
 import android.os.Build
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -101,12 +111,40 @@ fun RandomMemoSheet(
             onDispose { }
         }
 
-        RandomMemoContent(
-            memo = memo,
-            onNext = onNext,
-            onOpen = onOpen,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // 打开弹窗时内容淡入并轻微上移，配合弹窗自身的上滑，
+        // 让搜索页到随机漫步之间有一段过渡而不是生硬闪现
+        val contentVisible = remember { MutableTransitionState(false) }.apply { targetState = true }
+        AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = fadeIn(animationSpec = tween(220)) +
+                slideInVertically(
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it / 10 }
+                ),
+            // 收起时弹窗整体下滑，内容无需再播退出动画
+            exit = ExitTransition.None
+        ) {
+            // "换一条"：新旧笔记交叉淡入淡出并轻微上移，替代瞬间替换
+            AnimatedContent(
+                targetState = memo,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(220)) +
+                        slideInVertically(
+                            animationSpec = tween(280, easing = FastOutSlowInEasing),
+                            initialOffsetY = { it / 12 }
+                        ))
+                        .togetherWith(fadeOut(animationSpec = tween(150)))
+                },
+                label = "random-memo-switch"
+            ) { currentMemo ->
+                RandomMemoContent(
+                    memo = currentMemo,
+                    onNext = onNext,
+                    onOpen = onOpen,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
