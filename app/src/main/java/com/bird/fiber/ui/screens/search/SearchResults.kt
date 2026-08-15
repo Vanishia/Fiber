@@ -119,6 +119,7 @@ internal fun SearchResultsContent(
                         if (file != null) {
                             SearchResultItem(
                                 file = file,
+                                searchQuery = searchQuery,
                                 onClick = {
                                     Timber.d("搜索页面点击文件: ${file.name}, uri: ${file.uri}")
                                     onFileClick(file)

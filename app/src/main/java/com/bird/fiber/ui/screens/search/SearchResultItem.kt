@@ -21,6 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +35,8 @@ import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 internal fun SearchResultItem(
     file: MarkdownFileMeta,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    searchQuery: String = ""
 ) {
     Card(
         modifier = modifier
@@ -55,23 +59,33 @@ internal fun SearchResultItem(
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.primary
             )
 
             if (file.libraryName.isNotBlank()) {
                 Text(
                     text = file.libraryName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.Gray,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            if (file.preview.isNotBlank()) {
+            // 优先展示命中位置附近的片段，让用户看得出为什么搜到这条结果
+            val snippet = file.matchSnippet?.takeIf { it.isNotBlank() } ?: file.preview
+            if (snippet.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = file.preview,
+                    text = highlightKeyword(
+                        text = snippet,
+                        keyword = searchQuery,
+                        highlightStyle = SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            background = MaterialTheme.colorScheme.primaryContainer,
+                            fontWeight = FontWeight.Bold
+                        )
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -116,4 +130,22 @@ internal fun SearchResultItem(
             }
         }
     }
+}
+
+/**
+ * 将文本中所有（忽略大小写）出现的 [keyword] 应用 [highlightStyle] 高亮
+ */
+private fun highlightKeyword(
+    text: String,
+    keyword: String,
+    highlightStyle: SpanStyle
+): AnnotatedString {
+    if (keyword.isBlank()) return AnnotatedString(text)
+    val builder = AnnotatedString.Builder(text)
+    var index = text.indexOf(keyword, ignoreCase = true)
+    while (index >= 0) {
+        builder.addStyle(highlightStyle, index, index + keyword.length)
+        index = text.indexOf(keyword, startIndex = index + keyword.length, ignoreCase = true)
+    }
+    return builder.toAnnotatedString()
 }

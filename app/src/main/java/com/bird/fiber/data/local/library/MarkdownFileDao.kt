@@ -94,11 +94,20 @@ interface MarkdownFileDao {
     fun getFilesByLibrarySummary(libraryId: String): PagingSource<Int, MarkdownFileSummary>
 
     /**
-     * 搜索文件摘要（文件名 + 正文匹配，不含 content_text，性能优化）
+     * 搜索文件摘要（文件名 + 正文匹配，不返回完整 content_text，性能优化）
+     *
+     * match_snippet：正文命中时，截取命中位置附近的一段原文（前约 60 字符上下文，
+     * 共 200 字符，非开头处加省略号前缀）；仅标题/路径命中时回退为 content_preview
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
-               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               CASE
+                   WHEN instr(lower(content_text), lower(:query)) > 0 THEN
+                       (CASE WHEN instr(lower(content_text), lower(:query)) > 61 THEN '…' ELSE '' END) ||
+                       substr(content_text, MAX(1, instr(lower(content_text), lower(:query)) - 60), 200)
+                   ELSE content_preview
+               END AS match_snippet
         FROM markdown_files
         WHERE library_id = :libraryId
         AND is_deleted = 0
@@ -113,7 +122,13 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
-               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               CASE
+                   WHEN instr(lower(content_text), lower(:query)) > 0 THEN
+                       (CASE WHEN instr(lower(content_text), lower(:query)) > 61 THEN '…' ELSE '' END) ||
+                       substr(content_text, MAX(1, instr(lower(content_text), lower(:query)) - 60), 200)
+                   ELSE content_preview
+               END AS match_snippet
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
@@ -128,7 +143,13 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
-               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               CASE
+                   WHEN instr(lower(content_text), lower(:query)) > 0 THEN
+                       (CASE WHEN instr(lower(content_text), lower(:query)) > 61 THEN '…' ELSE '' END) ||
+                       substr(content_text, MAX(1, instr(lower(content_text), lower(:query)) - 60), 200)
+                   ELSE content_preview
+               END AS match_snippet
         FROM markdown_files
         WHERE is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
@@ -143,7 +164,13 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
-               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               CASE
+                   WHEN instr(lower(content_text), lower(:query)) > 0 THEN
+                       (CASE WHEN instr(lower(content_text), lower(:query)) > 61 THEN '…' ELSE '' END) ||
+                       substr(content_text, MAX(1, instr(lower(content_text), lower(:query)) - 60), 200)
+                   ELSE content_preview
+               END AS match_snippet
         FROM markdown_files
         WHERE is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')

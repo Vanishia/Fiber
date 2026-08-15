@@ -6,6 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.utils.MarkdownUtils
 
 /**
  * Markdown 文件元数据实体
@@ -121,9 +122,11 @@ fun MarkdownFileEntity.toMarkdownFileMeta(): MarkdownFileMeta {
 }
 
 /**
- * Markdown file 摘要——不含 content_text，用于列表/搜索展示
+ * Markdown file 摘要——不含完整 content_text，用于列表/搜索展示
  *
- * 避免 SELECT * 加载完整正文内容导致的 I/O 和内存开销
+ * 避免 SELECT * 加载完整正文内容导致的 I/O 和内存开销。
+ * 搜索查询额外返回 [matchSnippet]（命中位置附近的原文片段），
+ * 非搜索查询不返回该列，此时为 null，UI 回退展示 [contentPreview]。
  */
 data class MarkdownFileSummary(
     @ColumnInfo(name = "uri") val uri: String,
@@ -134,7 +137,8 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "content_preview") val contentPreview: String,
     @ColumnInfo(name = "has_image") val hasImage: Boolean,
     @ColumnInfo(name = "library_id") val libraryId: String,
-    @ColumnInfo(name = "library_name") val libraryName: String?
+    @ColumnInfo(name = "library_name") val libraryName: String?,
+    @ColumnInfo(name = "match_snippet") val matchSnippet: String? = null
 )
 
 data class MarkdownIndexSnapshot(
@@ -154,6 +158,10 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         preview = contentPreview,
         hasImage = hasImage,
         libraryId = libraryId,
-        libraryName = libraryName.orEmpty()
+        libraryName = libraryName.orEmpty(),
+        // 命中片段截取自原始 Markdown 正文，转为纯文本后再展示
+        matchSnippet = matchSnippet
+            ?.takeIf { it.isNotBlank() }
+            ?.let { MarkdownUtils.extractPlainTextPreview(it) }
     )
 }
