@@ -67,7 +67,9 @@ internal fun EditorEditPane(
                 .verticalScroll(scrollState),
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                // 行间距比默认字距稍微加大一点点（约 1.25 倍字号）
+                lineHeight = MaterialTheme.typography.bodyLarge.fontSize * 1.25f
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             onTextLayout = { layoutResult ->
