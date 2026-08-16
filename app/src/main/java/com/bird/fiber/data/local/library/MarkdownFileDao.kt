@@ -272,4 +272,16 @@ interface MarkdownFileDao {
         WHERE is_deleted = 0
     """)
     fun observeHeatmapEntries(): Flow<List<MarkdownHeatmapEntry>>
+
+    /**
+     * 获取所有库的文件摘要（"全部笔记"页面，按修改时间倒序）
+     */
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE is_deleted = 0
+        ORDER BY last_modified DESC
+    """)
+    fun getAllFilesSummary(): PagingSource<Int, MarkdownFileSummary>
 }

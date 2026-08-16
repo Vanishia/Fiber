@@ -34,6 +34,7 @@ import com.bird.fiber.ui.screens.quicknote.QuickNoteUiState
 import com.bird.fiber.ui.screens.quicknote.QuickNoteViewModel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import com.bird.fiber.ui.screens.sidebar.SidebarContent
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -47,6 +48,9 @@ fun MainScreenContainer(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
     onManageAttachments: (String) -> Unit = {},
+    onAllNotesClick: () -> Unit = {},
+    onHeatmapClick: () -> Unit = {},
+    onHeatmapDayClick: (LocalDate) -> Unit = {},
     topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
     viewModel: MainScreenViewModel = hiltViewModel(),
@@ -99,6 +103,19 @@ fun MainScreenContainer(
         onSearchClick = onSearchClick,
         onSettingsClick = onSettingsClick,
         onManageAttachments = onManageAttachments,
+        // 从抽屉导航到其他页面前先收起抽屉，返回时才不会看到残留的抽屉
+        onAllNotesClick = {
+            closeDrawerIfOpen()
+            onAllNotesClick()
+        },
+        onHeatmapClick = {
+            closeDrawerIfOpen()
+            onHeatmapClick()
+        },
+        onHeatmapDayClick = { date ->
+            closeDrawerIfOpen()
+            onHeatmapDayClick(date)
+        },
         topBarModifier = topBarModifier,
         onLibrarySelected = { libraryId ->
             viewModel.onLibrarySelected(libraryId)
@@ -131,6 +148,9 @@ private fun MainScreenRoute(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onManageAttachments: (String) -> Unit,
+    onAllNotesClick: () -> Unit,
+    onHeatmapClick: () -> Unit,
+    onHeatmapDayClick: (LocalDate) -> Unit,
     topBarModifier: Modifier,
     onLibrarySelected: (String) -> Unit,
     onOpenDrawer: () -> Unit,
@@ -158,6 +178,9 @@ private fun MainScreenRoute(
                 onAddLibrary = onAddLibrary,
                 onSettingsClick = onSettingsClick,
                 onManageAttachments = onManageAttachments,
+                onAllNotesClick = onAllNotesClick,
+                onHeatmapClick = onHeatmapClick,
+                onHeatmapDayClick = onHeatmapDayClick,
                 shouldComposeContent = shouldComposeDrawer
             )
         }
@@ -249,6 +272,9 @@ private fun MainDrawerContent(
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit,
     onManageAttachments: (String) -> Unit,
+    onAllNotesClick: () -> Unit,
+    onHeatmapClick: () -> Unit,
+    onHeatmapDayClick: (LocalDate) -> Unit,
     shouldComposeContent: Boolean
 ) {
     ModalDrawerSheet(
@@ -261,7 +287,10 @@ private fun MainDrawerContent(
                 onLibrarySelected = onLibrarySelected,
                 onAddLibrary = onAddLibrary,
                 onSettingsClick = onSettingsClick,
-                onManageAttachments = onManageAttachments
+                onManageAttachments = onManageAttachments,
+                onAllNotesClick = onAllNotesClick,
+                onHeatmapClick = onHeatmapClick,
+                onHeatmapDayClick = onHeatmapDayClick
             )
         } else {
             Spacer(modifier = Modifier.fillMaxSize())

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -70,6 +71,7 @@ fun SidebarContent(
     onManageAttachments: (String) -> Unit = {},
     onHeatmapClick: () -> Unit = {},
     onHeatmapDayClick: (LocalDate) -> Unit = {},
+    onAllNotesClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
@@ -108,6 +110,9 @@ fun SidebarContent(
             onDayClick = onHeatmapDayClick,
             onClick = onHeatmapClick
         )
+
+        // 全部笔记入口
+        AllNotesListItem(onClick = onAllNotesClick)
 
         // 底部操作区
         Column(
@@ -280,6 +285,45 @@ private fun LibraryListItem(
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * "全部笔记"入口（样式与库条目一致，无更多菜单）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AllNotesListItem(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Notes,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "全部笔记",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

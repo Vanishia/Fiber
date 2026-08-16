@@ -26,6 +26,7 @@ import androidx.navigation.navArgument
 import com.bird.fiber.ui.screens.editor.EditorScreen
 import com.bird.fiber.ui.screens.attachments.AttachmentManagerScreen
 import com.bird.fiber.ui.screens.main.MainScreenContainer
+import com.bird.fiber.ui.screens.notelist.AllNotesScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
 import com.bird.fiber.ui.screens.search.SearchScreen
 import com.bird.fiber.ui.screens.settings.SettingsScreen
@@ -85,6 +86,7 @@ fun FiberNavGraph(
                 onManageAttachments = { libraryId ->
                     navigateFromUser(FiberRoute.attachments(libraryId))
                 },
+                onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
                 topBarModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
                     animatedVisibilityScope = this
@@ -139,6 +141,13 @@ fun FiberNavGraph(
             QuickNoteScreen(
                 onClose = ::popFromUser,
                 onSaveSuccess = ::popFromUser
+            )
+        }
+
+        composable(route = FiberRoute.ALL_NOTES) {
+            AllNotesScreen(
+                onBackClick = ::popFromUser,
+                onFileClick = navigateToEditor
             )
         }
 
@@ -220,6 +229,7 @@ object FiberRoute {
     const val FILES = "files"
     const val EDITOR = "editor/{encodedFileUri}?mode={mode}"
     const val QUICKNOTE = "quicknote"
+    const val ALL_NOTES = "all_notes"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val ATTACHMENTS = "attachments/{libraryId}"

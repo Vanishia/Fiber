@@ -69,6 +69,7 @@ fun SwipeableContainer(
     onSwipeLeft: () -> Unit,
     onSwipeRight: () -> Unit,
     modifier: Modifier = Modifier,
+    swipeEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
@@ -139,7 +140,8 @@ fun SwipeableContainer(
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .fillMaxSize()
-                .pointerInput(Unit) {
+                .pointerInput(swipeEnabled) {
+                    if (!swipeEnabled) return@pointerInput
                     awaitPointerEventScope {
                         while (true) {
                             // 等待手指按下

@@ -49,6 +49,7 @@ fun FileListItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    swipeEnabled: Boolean = true,
     onDelete: () -> Unit = {},
     onEdit: () -> Unit = {}
 ) {
@@ -57,6 +58,7 @@ fun FileListItem(
     SwipeableContainer(
         onSwipeLeft = onDelete,
         onSwipeRight = onEdit,
+        swipeEnabled = swipeEnabled,
         modifier = modifier
     ) {
         Card(
