@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -44,26 +45,38 @@ fun FiberNavGraph(
 ) {
     val backgroundColor = MaterialTheme.colorScheme.background
     var lastUserNavigationAt by remember { mutableLongStateOf(0L) }
+    var lastUserNavigationRoute by remember { mutableStateOf<String?>(null) }
+    var lastUserPopAt by remember { mutableLongStateOf(0L) }
 
-    fun acceptUserNavigation(): Boolean {
+    /**
+     * 防抖只拦截"同一目的地的快速重复导航"（防双击重复入栈）。
+     * 不同目的地必须放行——否则刚进入页面就点卡片会被误吞
+     */
+    fun acceptUserNavigation(route: String): Boolean {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastUserNavigationAt < USER_NAVIGATION_DEBOUNCE_MS) {
+        if (route == lastUserNavigationRoute &&
+            now - lastUserNavigationAt < USER_NAVIGATION_DEBOUNCE_MS
+        ) {
             return false
         }
         lastUserNavigationAt = now
+        lastUserNavigationRoute = route
         return true
     }
 
     fun navigateFromUser(route: String) {
-        if (acceptUserNavigation()) {
+        if (acceptUserNavigation(route)) {
             navController.navigateSafely(route)
         }
     }
 
     fun popFromUser() {
-        if (acceptUserNavigation()) {
-            navController.popBackStackSafely()
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastUserPopAt < USER_NAVIGATION_DEBOUNCE_MS) {
+            return
         }
+        lastUserPopAt = now
+        navController.popBackStackSafely()
     }
 
     val navigateToEditor: (String, Boolean) -> Unit = { fileUri, editMode ->

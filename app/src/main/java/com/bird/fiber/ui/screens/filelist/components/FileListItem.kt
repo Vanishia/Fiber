@@ -55,19 +55,52 @@ fun FileListItem(
 ) {
     val isDarkTheme = LocalFiberSurfaceColors.current.pageBackground.luminance() < 0.5f
 
+    // 浏览页禁用滑动时直接渲染卡片，避免多余的手势层
+    if (!swipeEnabled) {
+        FileCard(
+            file = file,
+            displayPreview = displayPreview,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            isDarkTheme = isDarkTheme,
+            modifier = modifier
+        )
+        return
+    }
+
     SwipeableContainer(
         onSwipeLeft = onDelete,
         onSwipeRight = onEdit,
         swipeEnabled = swipeEnabled,
         modifier = modifier
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick
-                ),
+        FileCard(
+            file = file,
+            displayPreview = displayPreview,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            isDarkTheme = isDarkTheme
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FileCard(
+    file: MarkdownFileMeta,
+    displayPreview: String,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    isDarkTheme: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
             colors = CardDefaults.cardColors(
                 containerColor = LocalFiberSurfaceColors.current.contentCard
             ),
@@ -137,5 +170,4 @@ fun FileListItem(
                 }
             }
         }
-    }
 }
