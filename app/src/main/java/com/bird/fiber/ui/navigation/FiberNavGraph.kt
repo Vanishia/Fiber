@@ -25,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.bird.fiber.ui.screens.editor.EditorScreen
 import com.bird.fiber.ui.screens.attachments.AttachmentManagerScreen
+import com.bird.fiber.ui.screens.heatmap.HeatmapScreen
 import com.bird.fiber.ui.screens.main.MainScreenContainer
 import com.bird.fiber.ui.screens.notelist.NoteListRouteScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
@@ -90,6 +91,7 @@ fun FiberNavGraph(
                 onHeatmapDayClick = { date ->
                     navigateFromUser(FiberRoute.dayNotes(date))
                 },
+                onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 topBarModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
                     animatedVisibilityScope = this
@@ -164,6 +166,10 @@ fun FiberNavGraph(
                 onBackClick = ::popFromUser,
                 onFileClick = navigateToEditor
             )
+        }
+
+        composable(route = FiberRoute.HEATMAP) {
+            HeatmapScreen(onBackClick = ::popFromUser)
         }
 
         composable(route = FiberRoute.SEARCH) {
@@ -247,6 +253,7 @@ object FiberRoute {
     const val QUICKNOTE = "quicknote"
     const val ALL_NOTES = "all_notes"
     const val DAY_NOTES = "day_notes/{date}"
+    const val HEATMAP = "heatmap"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val ATTACHMENTS = "attachments/{libraryId}"
