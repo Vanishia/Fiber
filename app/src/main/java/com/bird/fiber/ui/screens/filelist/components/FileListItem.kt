@@ -28,17 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.bird.fiber.data.config.PreviewConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.utils.FileUtils
+import com.bird.fiber.utils.isQuickNoteFileName
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
-
-/**
- * 判断文件名是否为快速笔记的日期格式（yy-mm-dd_hh-mm-ss）
- * 匹配格式：26-01-29_02-38-10
- */
-private val QUICK_NOTE_PATTERN = Regex("^\\d{2}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}$")
-
-fun isQuickNoteFileName(fileName: String): Boolean {
-    return QUICK_NOTE_PATTERN.matches(fileName)
-}
 
 /**
  * 文件列表项（卡片样式，支持左滑删除、右滑编辑、长按菜单）

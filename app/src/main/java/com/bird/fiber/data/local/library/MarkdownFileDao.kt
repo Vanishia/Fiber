@@ -261,4 +261,15 @@ interface MarkdownFileDao {
         LIMIT 1
     """)
     suspend fun getRandomFileSummaryByLibrary(libraryId: String): MarkdownFileSummary?
+
+    /**
+     * 观察全库笔记的文件名与修改时间（记录热力图数据源）
+     *
+     * 返回 Flow：索引任何变化（保存/删除/同步）都会自动推送新聚合结果
+     */
+    @Query("""
+        SELECT name, last_modified FROM markdown_files
+        WHERE is_deleted = 0
+    """)
+    fun observeHeatmapEntries(): Flow<List<MarkdownHeatmapEntry>>
 }

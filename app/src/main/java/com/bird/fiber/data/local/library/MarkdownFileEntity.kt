@@ -148,6 +148,14 @@ data class MarkdownIndexSnapshot(
     @ColumnInfo(name = "has_search_content") val hasSearchContent: Boolean
 )
 
+/**
+ * 热力图聚合用的最小投影——只取文件名和修改时间，避免加载正文
+ */
+data class MarkdownHeatmapEntry(
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "last_modified") val lastModified: Long
+)
+
 fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
     return MarkdownFileMeta(
         uri = uri,

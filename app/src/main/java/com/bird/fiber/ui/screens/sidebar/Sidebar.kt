@@ -20,6 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.data.local.library.LibraryEntity
+import com.bird.fiber.ui.screens.sidebar.heatmap.NoteHeatmapSection
+import java.time.LocalDate
 
 /**
  * 侧边栏（完整版本，带背景和外层容器）
@@ -66,6 +68,8 @@ fun SidebarContent(
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit = {},
     onManageAttachments: (String) -> Unit = {},
+    onHeatmapClick: () -> Unit = {},
+    onHeatmapDayClick: (LocalDate) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
@@ -98,6 +102,12 @@ fun SidebarContent(
                 modifier = Modifier.weight(1f)
             )
         }
+
+        // 记录热力图
+        NoteHeatmapSection(
+            onDayClick = onHeatmapDayClick,
+            onClick = onHeatmapClick
+        )
 
         // 底部操作区
         Column(
