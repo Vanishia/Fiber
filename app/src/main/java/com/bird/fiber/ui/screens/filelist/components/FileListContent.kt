@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,22 +13,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,11 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.ui.components.FloatingTopAppBar
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
 
@@ -173,8 +165,7 @@ fun FileListContent(
             onMenuClick = onMenuClick,
             onSearchClick = onSearchClick,
             onCreateClick = onCreateClick,
-            currentLibraryName = currentLibraryName,
-            statusBarTopPadding = statusBarTopPadding,
+            title = currentLibraryName ?: "Fiber",
             modifier = topBarModifier.align(Alignment.TopCenter)
         )
     }
@@ -372,83 +363,5 @@ private fun FileList(
             searchQuery = searchQuery,
             modifier = Modifier.fillMaxSize()
         )
-    }
-}
-
-@Composable
-private fun FloatingTopAppBar(
-    onMenuClick: () -> Unit,
-    onSearchClick: () -> Unit,
-    onCreateClick: () -> Unit,
-    currentLibraryName: String?,
-    statusBarTopPadding: androidx.compose.ui.unit.Dp,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(start = 16.dp, end = 16.dp, top = 7.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = LocalFiberSurfaceColors.current.topBar
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = LocalFiberSurfaceColors.current.topBar,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onMenuClick, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "菜单",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    IconButton(onClick = onSearchClick, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "搜索",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Text(
-                        text = currentLibraryName ?: "Fiber",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    IconButton(onClick = onCreateClick, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Create,
-                            contentDescription = "新建",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
     }
 }

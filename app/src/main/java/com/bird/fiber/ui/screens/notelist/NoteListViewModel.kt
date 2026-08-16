@@ -9,6 +9,7 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
 import com.bird.fiber.data.config.PagingConfig
+import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.MarkdownFileSummary
 import com.bird.fiber.data.local.library.toMarkdownFileMeta
@@ -19,7 +20,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /**
@@ -32,6 +36,7 @@ import javax.inject.Inject
 @HiltViewModel
 class NoteListViewModel @Inject constructor(
     private val markdownFileDao: MarkdownFileDao,
+    libraryRepository: LibraryRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -40,6 +45,15 @@ class NoteListViewModel @Inject constructor(
 
     val title: String = date?.let { "${it}的笔记" } ?: "全部笔记"
     val emptyText: String = if (date != null) "这一天没有笔记" else "还没有笔记"
+
+    /** 当前激活库（侧边栏高亮用） */
+    val activeLibraryId: StateFlow<String?> = libraryRepository.getActiveLibrary()
+        .map { it?.id }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
 
     val pager: Flow<PagingData<MarkdownFileMeta>> = Pager(
         config = AndroidPagingConfig(

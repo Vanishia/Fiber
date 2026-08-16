@@ -165,7 +165,21 @@ fun FiberNavGraph(
         composable(route = FiberRoute.ALL_NOTES) {
             NoteListRouteScreen(
                 onBackClick = ::popFromUser,
-                onFileClick = navigateToEditor
+                onFileClick = navigateToEditor,
+                onSearchClick = { navigateFromUser(FiberRoute.SEARCH) },
+                onAddLibrary = onAddLibrary,
+                onSettingsClick = { navigateFromUser(FiberRoute.SETTINGS) },
+                onManageAttachments = { libraryId ->
+                    navigateFromUser(FiberRoute.attachments(libraryId))
+                },
+                // 已在全部笔记页，只需收起抽屉
+                onAllNotesClick = { },
+                onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
+                onHeatmapDayClick = { date ->
+                    navigateFromUser(FiberRoute.dayNotes(date))
+                },
+                // 切库后回主界面，主界面会展示新激活的库
+                onLibrarySelected = { popFromUser() }
             )
         }
 
@@ -177,7 +191,19 @@ fun FiberNavGraph(
         ) {
             NoteListRouteScreen(
                 onBackClick = ::popFromUser,
-                onFileClick = navigateToEditor
+                onFileClick = navigateToEditor,
+                onSearchClick = { navigateFromUser(FiberRoute.SEARCH) },
+                onAddLibrary = onAddLibrary,
+                onSettingsClick = { navigateFromUser(FiberRoute.SETTINGS) },
+                onManageAttachments = { libraryId ->
+                    navigateFromUser(FiberRoute.attachments(libraryId))
+                },
+                onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
+                onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
+                onHeatmapDayClick = { date ->
+                    navigateFromUser(FiberRoute.dayNotes(date))
+                },
+                onLibrarySelected = { popFromUser() }
             )
         }
 
