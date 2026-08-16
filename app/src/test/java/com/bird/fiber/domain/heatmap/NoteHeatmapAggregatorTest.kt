@@ -1,6 +1,7 @@
 package com.bird.fiber.domain.heatmap
 
 import com.bird.fiber.utils.parseQuickNoteDate
+import com.bird.fiber.utils.quickNoteGlobForDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -28,6 +29,17 @@ class NoteHeatmapAggregatorTest {
         assertNull(parseQuickNoteDate("26-01-32_00-00-00"))
         assertNull(parseQuickNoteDate("我的笔记"))
         assertNull(parseQuickNoteDate("2026-01-29_02-38-10"))
+    }
+
+    @Test
+    fun `GLOB 模式匹配对应日期的快速笔记文件名`() {
+        val glob = quickNoteGlobForDate(LocalDate.of(2026, 7, 26))
+        assertEquals("26-07-26_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]", glob)
+        // 转成正则验证语义：GLOB 的 [0-9] 等价于正则字符类
+        val regex = Regex(glob.replace("[0-9]", "[0-9]"))
+        assertTrue(regex.matches("26-07-26_02-38-10"))
+        assertFalse(regex.matches("26-07-27_02-38-10"))
+        assertFalse(regex.matches("26-07-26"))
     }
 
     @Test

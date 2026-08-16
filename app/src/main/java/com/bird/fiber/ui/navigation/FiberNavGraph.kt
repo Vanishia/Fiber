@@ -26,7 +26,7 @@ import androidx.navigation.navArgument
 import com.bird.fiber.ui.screens.editor.EditorScreen
 import com.bird.fiber.ui.screens.attachments.AttachmentManagerScreen
 import com.bird.fiber.ui.screens.main.MainScreenContainer
-import com.bird.fiber.ui.screens.notelist.AllNotesScreen
+import com.bird.fiber.ui.screens.notelist.NoteListRouteScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
 import com.bird.fiber.ui.screens.search.SearchScreen
 import com.bird.fiber.ui.screens.settings.SettingsScreen
@@ -87,6 +87,9 @@ fun FiberNavGraph(
                     navigateFromUser(FiberRoute.attachments(libraryId))
                 },
                 onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
+                onHeatmapDayClick = { date ->
+                    navigateFromUser(FiberRoute.dayNotes(date))
+                },
                 topBarModifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("main-search-top-bar"),
                     animatedVisibilityScope = this
@@ -145,7 +148,19 @@ fun FiberNavGraph(
         }
 
         composable(route = FiberRoute.ALL_NOTES) {
-            AllNotesScreen(
+            NoteListRouteScreen(
+                onBackClick = ::popFromUser,
+                onFileClick = navigateToEditor
+            )
+        }
+
+        composable(
+            route = FiberRoute.DAY_NOTES,
+            arguments = listOf(
+                navArgument(FiberRoute.ARG_DATE) { type = NavType.StringType }
+            )
+        ) {
+            NoteListRouteScreen(
                 onBackClick = ::popFromUser,
                 onFileClick = navigateToEditor
             )
@@ -223,6 +238,7 @@ object FiberRoute {
     const val ARG_ENCODED_FILE_URI = "encodedFileUri"
     const val ARG_EDITOR_MODE = "mode"
     const val ARG_LIBRARY_ID = "libraryId"
+    const val ARG_DATE = "date"
     const val MODE_PREVIEW = "preview"
     const val MODE_EDIT = "edit"
 
@@ -230,6 +246,7 @@ object FiberRoute {
     const val EDITOR = "editor/{encodedFileUri}?mode={mode}"
     const val QUICKNOTE = "quicknote"
     const val ALL_NOTES = "all_notes"
+    const val DAY_NOTES = "day_notes/{date}"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val ATTACHMENTS = "attachments/{libraryId}"
@@ -243,6 +260,8 @@ object FiberRoute {
     }
 
     fun attachments(libraryId: String): String = "attachments/${Uri.encode(libraryId)}"
+
+    fun dayNotes(date: java.time.LocalDate): String = "day_notes/$date"
 }
 
 private const val USER_NAVIGATION_DEBOUNCE_MS = 300L

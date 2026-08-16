@@ -30,3 +30,18 @@ fun parseQuickNoteDate(fileName: String): LocalDate? {
         null
     }
 }
+
+/**
+ * 匹配任意快速笔记文件名的 SQLite GLOB 模式（与 [QUICK_NOTE_PATTERN] 等价）
+ */
+const val ANY_QUICK_NOTE_GLOB =
+    "[0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+
+/**
+ * 匹配指定日期快速笔记文件名的 SQLite GLOB 模式（"当日笔记"查询用）
+ */
+fun quickNoteGlobForDate(date: LocalDate): String {
+    val year = date.year % 100
+    return "%02d-%02d-%02d_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+        .format(year, date.monthValue, date.dayOfMonth)
+}

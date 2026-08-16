@@ -284,4 +284,36 @@ interface MarkdownFileDao {
         ORDER BY last_modified DESC
     """)
     fun getAllFilesSummary(): PagingSource<Int, MarkdownFileSummary>
+
+    /**
+     * 获取"当日笔记"：热力图色块点击后的落地页（按修改时间倒序）
+     *
+     * 口径与热力图聚合一致：
+     * - 文件名是当天时间戳的快速笔记 → 按创建日归入
+     * - 其余文件名 → 按最后修改时间落入 [dayStartMillis, dayEndMillis) 归入
+     *
+     * 已知偏差：名字形如时间戳但日期非法（如 26-13-01）的文件，
+     * SQL 无法判断日期合法性，会被两个分支同时排除
+     */
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
+        WHERE is_deleted = 0
+        AND (
+            name GLOB :quickNoteGlob
+            OR (
+                name NOT GLOB :anyQuickNoteGlob
+                AND last_modified >= :dayStartMillis
+                AND last_modified < :dayEndMillis
+            )
+        )
+        ORDER BY last_modified DESC
+    """)
+    fun getFilesByDaySummary(
+        quickNoteGlob: String,
+        anyQuickNoteGlob: String,
+        dayStartMillis: Long,
+        dayEndMillis: Long
+    ): PagingSource<Int, MarkdownFileSummary>
 }
