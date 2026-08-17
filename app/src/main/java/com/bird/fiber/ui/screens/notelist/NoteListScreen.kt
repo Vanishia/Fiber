@@ -66,6 +66,8 @@ fun NoteListRouteScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val activeLibraryId by viewModel.activeLibraryId.collectAsStateWithLifecycle()
+    val title by viewModel.title.collectAsStateWithLifecycle()
+    val emptyText by viewModel.emptyText.collectAsStateWithLifecycle()
 
     fun closeDrawer() {
         scope.launch { drawerState.close() }
@@ -115,8 +117,8 @@ fun NoteListRouteScreen(
         }
     ) {
         NoteListScreen(
-            title = viewModel.title,
-            emptyText = viewModel.emptyText,
+            title = title,
+            emptyText = emptyText,
             pager = viewModel.pager,
             onMenuClick = { scope.launch { drawerState.open() } },
             onSearchClick = onSearchClick,
