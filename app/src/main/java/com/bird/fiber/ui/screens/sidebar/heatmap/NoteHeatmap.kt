@@ -10,17 +10,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.domain.heatmap.HeatmapDay
@@ -70,6 +74,26 @@ fun NoteHeatmap(
             )
             return@Column
         }
+
+        // 月份标签行：某周包含当月 1 号时在该列上方标注
+        Row(horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
+            uiState.weeks.forEach { week ->
+                val monthStart = week.firstOrNull { it.date.dayOfMonth == 1 }
+                Box(modifier = Modifier.width(CELL_SIZE_DP.dp)) {
+                    if (monthStart != null) {
+                        Text(
+                            text = "${monthStart.date.monthValue}月",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.requiredWidth(28.dp)
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
             uiState.weeks.forEach { week ->
