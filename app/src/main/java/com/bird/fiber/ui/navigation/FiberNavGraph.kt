@@ -70,6 +70,23 @@ fun FiberNavGraph(
         }
     }
 
+    /**
+     * 进入某日笔记页
+     *
+     * 当日页之间切换必须用替换语义：navigation 2.8.x 的 launchSingleTop
+     * 同路由导航复用 entry 时只更新 arguments Bundle，不同步 SavedStateHandle，
+     * ViewModel 拿不到新日期；popUpTo 自身 + inclusive 保证产生新 entry。
+     * 栈中没有当日页时 popUpTo 不匹配任何项，等效普通 push
+     */
+    fun navigateToDayNotes(date: java.time.LocalDate) {
+        val route = FiberRoute.dayNotes(date)
+        if (acceptUserNavigation(route)) {
+            navController.navigate(route) {
+                popUpTo(FiberRoute.DAY_NOTES) { inclusive = true }
+            }
+        }
+    }
+
     fun popFromUser() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastUserPopAt < USER_NAVIGATION_DEBOUNCE_MS) {
@@ -102,7 +119,7 @@ fun FiberNavGraph(
                 },
                 onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
                 onHeatmapDayClick = { date ->
-                    navigateFromUser(FiberRoute.dayNotes(date))
+                    navigateToDayNotes(date)
                 },
                 onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 topBarModifier = Modifier.sharedBounds(
@@ -176,7 +193,7 @@ fun FiberNavGraph(
                 onAllNotesClick = { },
                 onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 onHeatmapDayClick = { date ->
-                    navigateFromUser(FiberRoute.dayNotes(date))
+                    navigateToDayNotes(date)
                 },
                 // 切库后回主界面，主界面会展示新激活的库
                 onLibrarySelected = { popFromUser() }
@@ -201,7 +218,7 @@ fun FiberNavGraph(
                 onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
                 onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 onHeatmapDayClick = { date ->
-                    navigateFromUser(FiberRoute.dayNotes(date))
+                    navigateToDayNotes(date)
                 },
                 onLibrarySelected = { popFromUser() }
             )
