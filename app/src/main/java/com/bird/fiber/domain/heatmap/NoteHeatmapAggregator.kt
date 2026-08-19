@@ -84,6 +84,12 @@ object NoteHeatmapAggregator {
         }
     }
 
+    /** 覆盖最近一年（[today] 前 364 天到今天）所需的周列数 */
+    fun recentYearWeekCount(today: LocalDate): Int {
+        val todayRow = today.dayOfWeek.value - 1
+        return (364 + todayRow) / 7 + 1
+    }
+
     /**
      * 颜色分档：0 = 无笔记，1..档数 = 由浅到深
      *
