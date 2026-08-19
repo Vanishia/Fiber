@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -36,15 +35,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.YearMonth
 
+/** 面板打开时的用途：选月份（默认带年份切换）或直接选年份 */
+enum class HeatmapPickerMode { MONTH, YEAR }
+
 /**
  * 月份/年份选择面板
  *
- * 默认是月份面板：顶部年份可 ±1 切换，下方 4×3 月份网格（无笔记的月份置灰不可选）；
- * 点击年份进入年份列表（上下滚动，只列出有笔记的年份）：
- * 点年份文字直接看该年热力图，点尾部箭头回到该年的月份面板继续选月
+ * [HeatmapPickerMode.MONTH]：4×3 月份网格（无笔记的月份置灰不可选），
+ * 顶部年份可 ±1 切换，点年份进入年份列表，选中年份后回到月份面板继续选月；
+ * [HeatmapPickerMode.YEAR]：只有年份列表（上下滚动，只列出有笔记的年份），
+ * 点年份直接进入该年的年视图
  */
 @Composable
 fun MonthYearPickerDialog(
+    mode: HeatmapPickerMode,
     initialYear: Int,
     yearsWithNotes: List<Int>,
     monthsWithNotes: Set<YearMonth>,
@@ -53,7 +57,7 @@ fun MonthYearPickerDialog(
     onMonthSelected: (YearMonth) -> Unit
 ) {
     var displayedYear by remember { mutableIntStateOf(initialYear) }
-    var showYearList by remember { mutableStateOf(false) }
+    var showYearList by remember { mutableStateOf(mode == HeatmapPickerMode.YEAR) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -107,12 +111,15 @@ fun MonthYearPickerDialog(
                 YearList(
                     years = yearsWithNotes,
                     onYearClick = { year ->
-                        onYearSelected(year)
-                        onDismiss()
-                    },
-                    onPickMonth = { year ->
-                        displayedYear = year
-                        showYearList = false
+                        if (mode == HeatmapPickerMode.YEAR) {
+                            // 年份入口：直接看该年热力图
+                            onYearSelected(year)
+                            onDismiss()
+                        } else {
+                            // 月份入口：回到该年的月份面板继续选月
+                            displayedYear = year
+                            showYearList = false
+                        }
                     }
                 )
             } else {
@@ -180,8 +187,7 @@ private fun MonthGrid(
 @Composable
 private fun YearList(
     years: List<Int>,
-    onYearClick: (Int) -> Unit,
-    onPickMonth: (Int) -> Unit
+    onYearClick: (Int) -> Unit
 ) {
     if (years.isEmpty()) {
         Text(
@@ -197,26 +203,17 @@ private fun YearList(
     ) {
         items(years.size) { index ->
             val year = years[index]
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onYearClick(year) }
-                    .padding(start = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
             ) {
                 Text(
                     text = "${year}年",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
+                    style = MaterialTheme.typography.bodyLarge
                 )
-                IconButton(onClick = { onPickMonth(year) }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "选择该年的月份",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }

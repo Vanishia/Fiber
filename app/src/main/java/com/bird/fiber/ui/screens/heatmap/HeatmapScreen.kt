@@ -2,6 +2,7 @@ package com.bird.fiber.ui.screens.heatmap
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,8 +59,7 @@ import java.time.YearMonth
  * 记录热力图页
  *
  * 默认展示最近一年的全量热力图（可左右滑动）；
- * 顶栏右侧筛选菜单可切换 全部笔记 / 选择月份，
- * 月份面板里还能进入年份列表直接看某一整年；
+ * 顶栏右侧筛选菜单：全部笔记 / 选择月份（单月日历视图）/ 选择年份（整年周视图）；
  * 说明文字在热力图下方
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -72,7 +72,8 @@ fun HeatmapScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var menuExpanded by remember { mutableStateOf(false) }
-    var showMonthPicker by remember { mutableStateOf(false) }
+    var pickerMode by remember { mutableStateOf<HeatmapPickerMode?>(null) }
+    val today = remember { LocalDate.now() }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -117,12 +118,30 @@ fun HeatmapScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    else -> ScrollableWeeksHeatmap(
-                        weeks = uiState.weeks,
-                        maxCount = uiState.maxCount,
-                        onDayClick = onDayClick,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    else -> {
+                        val filter = uiState.filter
+                        if (filter is HeatmapFilter.Year) {
+                            ScrollableWeeksHeatmap(
+                                weeks = uiState.weeks,
+                                maxCount = uiState.maxCount,
+                                onDayClick = onDayClick,
+                                labelStart = LocalDate.of(filter.year, 1, 1),
+                                labelEnd = minOf(LocalDate.of(filter.year, 12, 31), today),
+                                scrollToEnd = false,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            ScrollableWeeksHeatmap(
+                                weeks = uiState.weeks,
+                                maxCount = uiState.maxCount,
+                                onDayClick = onDayClick,
+                                labelStart = today.minusDays(364),
+                                labelEnd = today,
+                                scrollToEnd = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
@@ -158,36 +177,28 @@ fun HeatmapScreen(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("全部笔记") },
-                                leadingIcon = {
-                                    if (uiState.filter == HeatmapFilter.All) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
+                            FilterMenuItem(
+                                text = "全部笔记",
+                                checked = uiState.filter == HeatmapFilter.All,
                                 onClick = {
                                     menuExpanded = false
                                     viewModel.selectFilter(HeatmapFilter.All)
                                 }
                             )
-                            DropdownMenuItem(
-                                text = { Text("选择月份") },
-                                leadingIcon = {
-                                    if (uiState.filter is HeatmapFilter.Month) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
+                            FilterMenuItem(
+                                text = "选择月份",
+                                checked = uiState.filter is HeatmapFilter.Month,
                                 onClick = {
                                     menuExpanded = false
-                                    showMonthPicker = true
+                                    pickerMode = HeatmapPickerMode.MONTH
+                                }
+                            )
+                            FilterMenuItem(
+                                text = "选择年份",
+                                checked = uiState.filter is HeatmapFilter.Year,
+                                onClick = {
+                                    menuExpanded = false
+                                    pickerMode = HeatmapPickerMode.YEAR
                                 }
                             )
                         }
@@ -197,23 +208,46 @@ fun HeatmapScreen(
         }
     }
 
-    if (showMonthPicker) {
+    val currentPickerMode = pickerMode
+    if (currentPickerMode != null) {
         val filter = uiState.filter
         MonthYearPickerDialog(
+            mode = currentPickerMode,
             initialYear = when (filter) {
                 is HeatmapFilter.Month -> filter.yearMonth.year
                 is HeatmapFilter.Year -> filter.year
-                HeatmapFilter.All -> YearMonth.now().year
+                HeatmapFilter.All -> today.year
             },
             yearsWithNotes = uiState.yearsWithNotes,
             monthsWithNotes = uiState.monthsWithNotes,
-            onDismiss = { showMonthPicker = false },
+            onDismiss = { pickerMode = null },
             onYearSelected = { year -> viewModel.selectFilter(HeatmapFilter.Year(year)) },
             onMonthSelected = { yearMonth ->
                 viewModel.selectFilter(HeatmapFilter.Month(yearMonth))
             }
         )
     }
+}
+
+@Composable
+private fun FilterMenuItem(
+    text: String,
+    checked: Boolean,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        leadingIcon = {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        },
+        onClick = onClick
+    )
 }
 
 private fun filterCaption(filter: HeatmapFilter): String = when (filter) {
@@ -226,27 +260,36 @@ private fun filterCaption(filter: HeatmapFilter): String = when (filter) {
 /**
  * 横向可滑动的周网格热力图（一列一周，周一在首行）
  *
- * 采用反向布局：最新一周贴右端，初始即可看到今天，向左滑回看更早的日期；
- * 有笔记的色块可点击定位到当天笔记
+ * 结构与侧边栏一致：标签行和格子行在同一个横向滚动容器里，保证对齐；
+ * 月份标签只标注落在 [labelStart]..[labelEnd] 范围内的月份，
+ * 避免年视图首尾跨年的周多出租邻年份的"1月"、当前年未来月份悬在空白列上；
+ * [scrollToEnd] 为 true 时初始滚动到最右端（今天）
  */
 @Composable
 private fun ScrollableWeeksHeatmap(
     weeks: List<List<HeatmapDay>>,
     maxCount: Int,
     onDayClick: (LocalDate) -> Unit,
+    labelStart: LocalDate,
+    labelEnd: LocalDate,
+    scrollToEnd: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val reversedWeeks = weeks.asReversed()
-    LazyRow(
-        modifier = modifier.height(WEEKS_HEATMAP_HEIGHT_DP.dp),
-        reverseLayout = true,
-        horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)
-    ) {
-        items(reversedWeeks.size) { index ->
-            val week = reversedWeeks[index]
-            Column {
-                // 月份标签：某周包含当月 1 号时在该列上方标注
-                val monthStart = week.firstOrNull { it.date.dayOfMonth == 1 }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(weeks, scrollToEnd) {
+        if (scrollToEnd && weeks.isNotEmpty()) {
+            scrollState.scrollTo(scrollState.maxValue)
+        }
+    }
+
+    Column(modifier = modifier.horizontalScroll(scrollState)) {
+        // 月份标签行：某周包含范围内当月 1 号时在该列上方标注
+        Row(horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
+            weeks.forEach { week ->
+                val monthStart = week.firstOrNull {
+                    it.date.dayOfMonth == 1 && !it.date.isBefore(labelStart) &&
+                        !it.date.isAfter(labelEnd)
+                }
                 Box(
                     modifier = Modifier
                         .width(CELL_SIZE_DP.dp)
@@ -263,8 +306,12 @@ private fun ScrollableWeeksHeatmap(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
 
+        Row(horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
+            weeks.forEach { week ->
                 Column(verticalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
                     week.forEach { day ->
                         WeekGridCell(day = day, maxCount = maxCount, onDayClick = onDayClick)
