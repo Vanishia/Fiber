@@ -22,11 +22,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.ColorUtils
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.utils.FileUtils
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
@@ -80,11 +83,7 @@ internal fun SearchResultItem(
                     text = highlightKeyword(
                         text = snippet,
                         keyword = searchQuery,
-                        highlightStyle = SpanStyle(
-                            color = MaterialTheme.colorScheme.primary,
-                            background = MaterialTheme.colorScheme.primaryContainer,
-                            fontWeight = FontWeight.Bold
-                        )
+                        highlightStyle = keywordHighlightStyle()
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
@@ -131,6 +130,34 @@ internal fun SearchResultItem(
         }
     }
 }
+
+/**
+ * 命中词高亮样式：底色沿用主题色相，只按日夜间调整明度（不动饱和度），
+ * 避免 primaryContainer 直接当底色过于刺眼；文字用跟随日夜的黑白，保留加粗
+ */
+@Composable
+private fun keywordHighlightStyle(): SpanStyle {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val background = MaterialTheme.colorScheme.primary.withLightness(
+        if (isDark) DARK_HIGHLIGHT_LIGHTNESS else LIGHT_HIGHLIGHT_LIGHTNESS
+    )
+    return SpanStyle(
+        color = if (isDark) Color.White else Color.Black,
+        background = background,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+/** 保持色相与饱和度，仅替换 HSL 明度 */
+private fun Color.withLightness(lightness: Float): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(toArgb(), hsl)
+    hsl[2] = lightness
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+
+private const val LIGHT_HIGHLIGHT_LIGHTNESS = 0.86f
+private const val DARK_HIGHLIGHT_LIGHTNESS = 0.30f
 
 /**
  * 将文本中所有（忽略大小写）出现的 [keyword] 应用 [highlightStyle] 高亮
