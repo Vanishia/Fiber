@@ -92,18 +92,20 @@ object NoteHeatmapAggregator {
     }
 
     /**
-     * 构建某年的周网格：每列一周（周一在首行），覆盖该年 1 月 1 日到 12 月 31 日
+     * 构建某年的周网格：每列一周（周一在首行），覆盖该年 1 月 1 日起
      *
-     * 首尾周补齐出的年外日期、晚于今天的日期都以 isFuture=true 占位（不渲染）
+     * 未过完的年只截到 [today] 所在的周，避免后面拖着几个月的空白列；
+     * 首周补齐出的年外日期、晚于今天的日期都以 isFuture=true 占位（不渲染）
      */
     fun buildYearWeeks(
         counts: Map<LocalDate, Int>,
         year: Int,
         today: LocalDate
     ): List<List<HeatmapDay>> {
-        val firstMonday = LocalDate.of(year, 1, 1)
-            .minusDays((LocalDate.of(year, 1, 1).dayOfWeek.value - 1).toLong())
-        val lastDay = LocalDate.of(year, 12, 31)
+        val firstDay = LocalDate.of(year, 1, 1)
+        val firstMonday = firstDay.minusDays((firstDay.dayOfWeek.value - 1).toLong())
+        val lastDay = minOf(LocalDate.of(year, 12, 31), today)
+        if (lastDay.isBefore(firstDay)) return emptyList()
         val lastMonday = lastDay.minusDays((lastDay.dayOfWeek.value - 1).toLong())
         val weeks = ((lastMonday.toEpochDay() - firstMonday.toEpochDay()) / 7 + 1).toInt()
 

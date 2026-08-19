@@ -282,7 +282,12 @@ private fun ScrollableWeeksHeatmap(
         }
     }
 
-    Column(modifier = modifier.horizontalScroll(scrollState)) {
+    Column(
+        modifier = modifier
+            .horizontalScroll(scrollState)
+            // 留白在滚动内容内侧：给首列月份标签的左溢出留空间，避免贴边被裁
+            .padding(start = 10.dp, end = 4.dp)
+    ) {
         // 月份标签行：某周包含范围内当月 1 号时在该列上方标注
         Row(horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
             weeks.forEach { week ->

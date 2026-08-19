@@ -140,20 +140,41 @@ class NoteHeatmapAggregatorTest {
     @Test
     fun `年网格覆盖整年且年外日期不渲染`() {
         val today = LocalDate.of(2026, 8, 19)
-        val counts = mapOf(LocalDate.of(2025, 12, 29) to 3, LocalDate.of(2026, 1, 5) to 2)
-        val weeks = NoteHeatmapAggregator.buildYearWeeks(counts, 2026, today)
+        val counts = mapOf(LocalDate.of(2024, 12, 30) to 3, LocalDate.of(2025, 1, 5) to 2)
+        val weeks = NoteHeatmapAggregator.buildYearWeeks(counts, 2025, today)
 
-        // 2026-01-01 是周四，其周一是 2025-12-29
-        assertEquals(LocalDate.of(2025, 12, 29), weeks.first().first().date)
+        // 2025-01-01 是周三，其周一是 2024-12-30
+        assertEquals(LocalDate.of(2024, 12, 30), weeks.first().first().date)
         // 年外日期标记占位且不计数
         assertTrue(weeks.first().first().isFuture)
         assertEquals(0, weeks.first().first().count)
         // 年内日期正常计数
-        val jan5 = weeks.flatten().first { it.date == LocalDate.of(2026, 1, 5) }
+        val jan5 = weeks.flatten().first { it.date == LocalDate.of(2025, 1, 5) }
         assertEquals(2, jan5.count)
         assertFalse(jan5.isFuture)
-        // 今天之后的日期占位
-        assertTrue(weeks.flatten().first { it.date == LocalDate.of(2026, 12, 31) }.isFuture)
+        // 已结束的年完整铺到 12 月 31 日
+        val dec31 = weeks.flatten().first { it.date == LocalDate.of(2025, 12, 31) }
+        assertFalse(dec31.isFuture)
+    }
+
+    @Test
+    fun `未过完的年截断到今天所在的周`() {
+        val today = LocalDate.of(2026, 8, 19) // 周三
+        val weeks = NoteHeatmapAggregator.buildYearWeeks(emptyMap(), 2026, today)
+
+        val dates = weeks.flatten().map { it.date }
+        // 最后一列是今天所在的周，后面没有整周的空白列
+        assertTrue(dates.contains(today))
+        assertTrue(dates.none { it.isAfter(today.plusDays(4)) })
+        assertEquals(today.plusDays(4), dates.last()) // 本周日 2026-08-23
+        // 今天之后的日子仍是占位
+        assertTrue(weeks.flatten().first { it.date == today.plusDays(1) }.isFuture)
+    }
+
+    @Test
+    fun `整年都在未来的年份返回空网格`() {
+        val today = LocalDate.of(2026, 8, 19)
+        assertTrue(NoteHeatmapAggregator.buildYearWeeks(emptyMap(), 2027, today).isEmpty())
     }
 
     @Test
