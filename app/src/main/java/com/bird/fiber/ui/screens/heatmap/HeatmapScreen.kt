@@ -1,6 +1,7 @@
 package com.bird.fiber.ui.screens.heatmap
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import com.bird.fiber.domain.heatmap.HeatmapDay
 import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
 import com.bird.fiber.ui.components.FloatingBackTopBar
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import java.time.LocalDate
 import java.time.YearMonth
 
 /**
@@ -64,6 +66,7 @@ import java.time.YearMonth
 @Composable
 fun HeatmapScreen(
     onBackClick: () -> Unit,
+    onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HeatmapPageViewModel = hiltViewModel()
 ) {
@@ -110,12 +113,14 @@ fun HeatmapScreen(
                     uiState.filter is HeatmapFilter.Month -> MonthCalendarGrid(
                         rows = uiState.monthRows,
                         maxCount = uiState.maxCount,
+                        onDayClick = onDayClick,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     else -> ScrollableWeeksHeatmap(
                         weeks = uiState.weeks,
                         maxCount = uiState.maxCount,
+                        onDayClick = onDayClick,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -221,12 +226,14 @@ private fun filterCaption(filter: HeatmapFilter): String = when (filter) {
 /**
  * 横向可滑动的周网格热力图（一列一周，周一在首行）
  *
- * 采用反向布局：最新一周贴右端，初始即可看到今天，向左滑回看更早的日期
+ * 采用反向布局：最新一周贴右端，初始即可看到今天，向左滑回看更早的日期；
+ * 有笔记的色块可点击定位到当天笔记
  */
 @Composable
 private fun ScrollableWeeksHeatmap(
     weeks: List<List<HeatmapDay>>,
     maxCount: Int,
+    onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val reversedWeeks = weeks.asReversed()
@@ -260,7 +267,7 @@ private fun ScrollableWeeksHeatmap(
 
                 Column(verticalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
                     week.forEach { day ->
-                        WeekGridCell(day = day, maxCount = maxCount)
+                        WeekGridCell(day = day, maxCount = maxCount, onDayClick = onDayClick)
                     }
                 }
             }
@@ -270,12 +277,13 @@ private fun ScrollableWeeksHeatmap(
 
 /**
  * 单月日历视图：一行一周（周一在首列），格子更大并标注日期数字，
- * 颜色按当月最大值分档
+ * 颜色按当月最大值分档；有笔记的格子可点击定位到当天笔记
  */
 @Composable
 private fun MonthCalendarGrid(
     rows: List<List<HeatmapDay?>>,
     maxCount: Int,
+    onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -313,7 +321,15 @@ private fun MonthCalendarGrid(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(monthCellColor(level)),
+                                    .background(monthCellColor(level))
+                                    // 0 篇的日子不可点
+                                    .then(
+                                        if (day.count > 0) {
+                                            Modifier.clickable { onDayClick(day.date) }
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -331,7 +347,11 @@ private fun MonthCalendarGrid(
 }
 
 @Composable
-private fun WeekGridCell(day: HeatmapDay, maxCount: Int) {
+private fun WeekGridCell(
+    day: HeatmapDay,
+    maxCount: Int,
+    onDayClick: (LocalDate) -> Unit
+) {
     if (day.isFuture) {
         // 未来/范围外日期占位，保持网格对齐
         Spacer(modifier = Modifier.size(CELL_SIZE_DP.dp))
@@ -342,6 +362,14 @@ private fun WeekGridCell(day: HeatmapDay, maxCount: Int) {
             .size(CELL_SIZE_DP.dp)
             .clip(RoundedCornerShape(3.dp))
             .background(weekCellColor(day.count, maxCount))
+            // 0 篇的日子不可点
+            .then(
+                if (day.count > 0) {
+                    Modifier.clickable { onDayClick(day.date) }
+                } else {
+                    Modifier
+                }
+            )
     )
 }
 

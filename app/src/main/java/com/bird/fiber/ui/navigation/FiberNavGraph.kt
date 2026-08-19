@@ -225,7 +225,10 @@ fun FiberNavGraph(
         }
 
         composable(route = FiberRoute.HEATMAP) {
-            HeatmapScreen(onBackClick = ::popFromUser)
+            HeatmapScreen(
+                onBackClick = ::popFromUser,
+                onDayClick = { date -> navigateToDayNotes(date) }
+            )
         }
 
         composable(route = FiberRoute.SEARCH) {
