@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.domain.heatmap.HeatmapDay
+import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
 import java.time.LocalDate
 
 /**
@@ -131,12 +132,10 @@ private fun HeatmapCell(
 
 @Composable
 private fun cellColor(count: Int, maxCount: Int): Color {
-    if (count == 0 || maxCount == 0) {
+    val level = NoteHeatmapAggregator.colorLevel(count, maxCount)
+    if (level == 0) {
         return MaterialTheme.colorScheme.surfaceVariant
     }
-    val level = ((count.toFloat() / maxCount) * LEVEL_ALPHAS.size)
-        .toInt()
-        .coerceIn(1, LEVEL_ALPHAS.size)
     return MaterialTheme.colorScheme.primary.copy(alpha = LEVEL_ALPHAS[level - 1])
 }
 

@@ -104,4 +104,36 @@ class NoteHeatmapAggregatorTest {
         val day = weeks.flatten().first { it.date == today.minusDays(1) }
         assertEquals(5, day.count)
     }
+
+    @Test
+    fun `无笔记或无最大值时分档为 0`() {
+        assertEquals(0, NoteHeatmapAggregator.colorLevel(0, 10))
+        assertEquals(0, NoteHeatmapAggregator.colorLevel(5, 0))
+    }
+
+    @Test
+    fun `单日 32 条封顶为最深色且超出不再加深`() {
+        val max = 45
+        assertEquals(4, NoteHeatmapAggregator.colorLevel(32, max))
+        assertEquals(4, NoteHeatmapAggregator.colorLevel(45, max))
+        // 32 封顶后均分：31 条落在第三档，不会被 45 条压得更浅
+        assertEquals(3, NoteHeatmapAggregator.colorLevel(31, max))
+        assertEquals(2, NoteHeatmapAggregator.colorLevel(20, max))
+        assertEquals(1, NoteHeatmapAggregator.colorLevel(5, max))
+    }
+
+    @Test
+    fun `单日最高不足 20 条时只有三个颜色层级`() {
+        val max = 10
+        // 最高也只有第三档（第二深的颜色），不会出最深色
+        assertEquals(3, NoteHeatmapAggregator.colorLevel(10, max))
+        assertEquals(2, NoteHeatmapAggregator.colorLevel(7, max))
+        assertEquals(1, NoteHeatmapAggregator.colorLevel(1, max))
+    }
+
+    @Test
+    fun `单日最高达到 20 条时启用四个颜色层级`() {
+        val max = 20
+        assertEquals(4, NoteHeatmapAggregator.colorLevel(20, max))
+    }
 }

@@ -83,4 +83,29 @@ object NoteHeatmapAggregator {
             }
         }
     }
+
+    /**
+     * 颜色分档：0 = 无笔记，1..档数 = 由浅到深
+     *
+     * 规则：
+     * - 单日 [FULL_COLOR_COUNT] 条封顶：达到即为最深色，其余按 32 均分，
+     *   避免个别高产日（如 40+ 条）把普通日子压得过浅
+     * - 范围内单日最高不足 [DEEP_LEVEL_MIN_COUNT] 条时只用 3 档（不出最深色），
+     *   避免"没写多少就显示最深"，更贴合"写得越多颜色越深"的直觉
+     */
+    fun colorLevel(count: Int, maxCount: Int): Int {
+        if (count <= 0 || maxCount <= 0) return 0
+        val levelCount = if (maxCount >= DEEP_LEVEL_MIN_COUNT) LEVEL_COUNT else LEVEL_COUNT - 1
+        val cap = minOf(maxCount, FULL_COLOR_COUNT)
+        return ((count.toFloat() / cap) * levelCount).toInt().coerceIn(1, levelCount)
+    }
+
+    /** 单日笔记数达到该值即最深色 */
+    const val FULL_COLOR_COUNT = 32
+
+    /** 范围内单日最高达到该值才启用最深色档 */
+    const val DEEP_LEVEL_MIN_COUNT = 20
+
+    /** 颜色档数（不含无笔记的灰格） */
+    const val LEVEL_COUNT = 4
 }
