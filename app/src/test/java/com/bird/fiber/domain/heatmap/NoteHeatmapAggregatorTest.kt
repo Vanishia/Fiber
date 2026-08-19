@@ -136,4 +136,53 @@ class NoteHeatmapAggregatorTest {
         val max = 20
         assertEquals(4, NoteHeatmapAggregator.colorLevel(20, max))
     }
+
+    @Test
+    fun `年网格覆盖整年且年外日期不渲染`() {
+        val today = LocalDate.of(2026, 8, 19)
+        val counts = mapOf(LocalDate.of(2025, 12, 29) to 3, LocalDate.of(2026, 1, 5) to 2)
+        val weeks = NoteHeatmapAggregator.buildYearWeeks(counts, 2026, today)
+
+        // 2026-01-01 是周四，其周一是 2025-12-29
+        assertEquals(LocalDate.of(2025, 12, 29), weeks.first().first().date)
+        // 年外日期标记占位且不计数
+        assertTrue(weeks.first().first().isFuture)
+        assertEquals(0, weeks.first().first().count)
+        // 年内日期正常计数
+        val jan5 = weeks.flatten().first { it.date == LocalDate.of(2026, 1, 5) }
+        assertEquals(2, jan5.count)
+        assertFalse(jan5.isFuture)
+        // 今天之后的日期占位
+        assertTrue(weeks.flatten().first { it.date == LocalDate.of(2026, 12, 31) }.isFuture)
+    }
+
+    @Test
+    fun `月网格每行一周且月外日期为 null`() {
+        val today = LocalDate.of(2026, 8, 31)
+        val yearMonth = java.time.YearMonth.of(2026, 8)
+        val counts = mapOf(LocalDate.of(2026, 8, 15) to 4)
+        val rows = NoteHeatmapAggregator.buildMonthRows(counts, yearMonth, today)
+
+        // 2026-08-01 是周六，首行前几天是 7 月的占位
+        assertNull(rows.first()[0]) // 周一
+        assertNull(rows.first()[4]) // 周五
+        assertEquals(LocalDate.of(2026, 8, 1), rows.first()[5]?.date)
+        // 每行 7 天，行内周一开头
+        rows.forEach { row -> assertEquals(7, row.size) }
+        val aug15 = rows.flatten().filterNotNull().first { it.date == LocalDate.of(2026, 8, 15) }
+        assertEquals(4, aug15.count)
+    }
+
+    @Test
+    fun `最近一年周列数覆盖 365 天`() {
+        val today = LocalDate.of(2026, 8, 19) // 周三
+        val weeks = NoteHeatmapAggregator.recentYearWeekCount(today)
+        val grid = NoteHeatmapAggregator.buildWeeks(emptyMap(), today, weeks)
+        // 364 天前落在第一列周内（周一对齐，起点可能再往前挪几天）
+        val first = grid.first().first().date
+        val yearAgo = today.minusDays(364)
+        assertFalse(yearAgo.isBefore(first))
+        assertFalse(yearAgo.isAfter(first.plusDays(6)))
+        assertEquals(today, grid.last()[today.dayOfWeek.value - 1].date)
+    }
 }

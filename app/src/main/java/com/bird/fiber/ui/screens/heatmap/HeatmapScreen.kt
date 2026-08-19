@@ -1,11 +1,13 @@
 package com.bird.fiber.ui.screens.heatmap
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,18 +16,32 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,10 +50,15 @@ import com.bird.fiber.domain.heatmap.HeatmapDay
 import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
 import com.bird.fiber.ui.components.FloatingBackTopBar
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import java.time.YearMonth
 
 /**
- * 记录热力图页：默认展示最近一年的全量热力图（可左右滑动），
- * 色块越深得当天笔记越多；说明文字在热力图下方
+ * 记录热力图页
+ *
+ * 默认展示最近一年的全量热力图（可左右滑动）；
+ * 顶栏右侧筛选菜单可切换 全部笔记 / 选择月份，
+ * 月份面板里还能进入年份列表直接看某一整年；
+ * 说明文字在热力图下方
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -47,6 +68,8 @@ fun HeatmapScreen(
     viewModel: HeatmapPageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -57,16 +80,40 @@ fun HeatmapScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(start = 20.dp, end = 20.dp, top = 96.dp)
             ) {
-                if (!uiState.isLoaded) {
-                    LinearWavyProgressIndicator(
+                // 当前筛选范围说明
+                Text(
+                    text = filterCaption(uiState.filter),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                when {
+                    !uiState.isLoaded -> LinearWavyProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(HEATMAP_TOTAL_HEIGHT_DP.dp)
+                            .height(WEEKS_HEATMAP_HEIGHT_DP.dp)
                     )
-                } else {
-                    ScrollableWeeksHeatmap(
+
+                    uiState.isSwitching -> Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(WEEKS_HEATMAP_HEIGHT_DP.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+
+                    uiState.filter is HeatmapFilter.Month -> MonthCalendarGrid(
+                        rows = uiState.monthRows,
+                        maxCount = uiState.maxCount,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    else -> ScrollableWeeksHeatmap(
                         weeks = uiState.weeks,
                         maxCount = uiState.maxCount,
                         modifier = Modifier.fillMaxWidth()
@@ -77,8 +124,7 @@ fun HeatmapScreen(
 
                 Text(
                     text = "热力图统计每个笔记归属的日期：快速笔记按文件名中的时间戳计入创建当天，" +
-                        "其余笔记按最后修改时间计入；颜色越深表示当天的笔记越多。" +
-                        "左右滑动可以查看最近一年的记录。",
+                        "其余笔记按最后修改时间计入；颜色越深表示当天的笔记越多。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -89,10 +135,87 @@ fun HeatmapScreen(
                 onBackClick = onBackClick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .fillMaxWidth()
+                    .fillMaxWidth(),
+                actions = {
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FilterList,
+                                contentDescription = "筛选",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("全部笔记") },
+                                leadingIcon = {
+                                    if (uiState.filter == HeatmapFilter.All) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.selectFilter(HeatmapFilter.All)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("选择月份") },
+                                leadingIcon = {
+                                    if (uiState.filter is HeatmapFilter.Month) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showMonthPicker = true
+                                }
+                            )
+                        }
+                    }
+                }
             )
         }
     }
+
+    if (showMonthPicker) {
+        val filter = uiState.filter
+        MonthYearPickerDialog(
+            initialYear = when (filter) {
+                is HeatmapFilter.Month -> filter.yearMonth.year
+                is HeatmapFilter.Year -> filter.year
+                HeatmapFilter.All -> YearMonth.now().year
+            },
+            yearsWithNotes = uiState.yearsWithNotes,
+            monthsWithNotes = uiState.monthsWithNotes,
+            onDismiss = { showMonthPicker = false },
+            onYearSelected = { year -> viewModel.selectFilter(HeatmapFilter.Year(year)) },
+            onMonthSelected = { yearMonth ->
+                viewModel.selectFilter(HeatmapFilter.Month(yearMonth))
+            }
+        )
+    }
+}
+
+private fun filterCaption(filter: HeatmapFilter): String = when (filter) {
+    HeatmapFilter.All -> "最近一年"
+    is HeatmapFilter.Year -> "${filter.year}年"
+    is HeatmapFilter.Month ->
+        "${filter.yearMonth.year}年${filter.yearMonth.monthValue}月"
 }
 
 /**
@@ -108,7 +231,7 @@ private fun ScrollableWeeksHeatmap(
 ) {
     val reversedWeeks = weeks.asReversed()
     LazyRow(
-        modifier = modifier.height(HEATMAP_TOTAL_HEIGHT_DP.dp),
+        modifier = modifier.height(WEEKS_HEATMAP_HEIGHT_DP.dp),
         reverseLayout = true,
         horizontalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)
     ) {
@@ -137,7 +260,69 @@ private fun ScrollableWeeksHeatmap(
 
                 Column(verticalArrangement = Arrangement.spacedBy(CELL_SPACING_DP.dp)) {
                     week.forEach { day ->
-                        HeatmapCell(day = day, maxCount = maxCount)
+                        WeekGridCell(day = day, maxCount = maxCount)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单月日历视图：一行一周（周一在首列），格子更大并标注日期数字，
+ * 颜色按当月最大值分档
+ */
+@Composable
+private fun MonthCalendarGrid(
+    rows: List<List<HeatmapDay?>>,
+    maxCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        // 星期表头（周一开头，与周网格口径一致）
+        Row(modifier = Modifier.fillMaxWidth()) {
+            WEEKDAY_LABELS.forEach { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(bottom = 6.dp)
+                )
+            }
+        }
+
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MONTH_CELL_SPACING_DP.dp)
+            ) {
+                row.forEach { day ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .padding(MONTH_CELL_SPACING_DP.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (day != null && !day.isFuture) {
+                            val level = NoteHeatmapAggregator.colorLevel(day.count, maxCount)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(monthCellColor(level)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = day.date.dayOfMonth.toString(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = monthCellTextColor(level)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -146,9 +331,9 @@ private fun ScrollableWeeksHeatmap(
 }
 
 @Composable
-private fun HeatmapCell(day: HeatmapDay, maxCount: Int) {
+private fun WeekGridCell(day: HeatmapDay, maxCount: Int) {
     if (day.isFuture) {
-        // 未来日期占位，保持网格对齐
+        // 未来/范围外日期占位，保持网格对齐
         Spacer(modifier = Modifier.size(CELL_SIZE_DP.dp))
         return
     }
@@ -156,12 +341,12 @@ private fun HeatmapCell(day: HeatmapDay, maxCount: Int) {
         modifier = Modifier
             .size(CELL_SIZE_DP.dp)
             .clip(RoundedCornerShape(3.dp))
-            .background(cellColor(day.count, maxCount))
+            .background(weekCellColor(day.count, maxCount))
     )
 }
 
 @Composable
-private fun cellColor(count: Int, maxCount: Int): Color {
+private fun weekCellColor(count: Int, maxCount: Int): Color {
     val level = NoteHeatmapAggregator.colorLevel(count, maxCount)
     if (level == 0) {
         return MaterialTheme.colorScheme.surfaceVariant
@@ -169,9 +354,29 @@ private fun cellColor(count: Int, maxCount: Int): Color {
     return MaterialTheme.colorScheme.primary.copy(alpha = LEVEL_ALPHAS[level - 1])
 }
 
+@Composable
+private fun monthCellColor(level: Int): Color {
+    if (level == 0) {
+        return MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    }
+    return MaterialTheme.colorScheme.primary.copy(alpha = LEVEL_ALPHAS[level - 1])
+}
+
+@Composable
+private fun monthCellTextColor(level: Int): Color {
+    return if (level >= LEVEL_ALPHAS.size - 1) {
+        // 深底色上用页面底色反白，保证可读
+        LocalFiberSurfaceColors.current.pageBackground
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+}
+
 private val LEVEL_ALPHAS = floatArrayOf(0.25f, 0.45f, 0.7f, 1f)
+private val WEEKDAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
 private const val CELL_SIZE_DP = 13
 private const val CELL_SPACING_DP = 3
+private const val MONTH_CELL_SPACING_DP = 2
 private const val MONTH_LABEL_HEIGHT_DP = 14
-private val HEATMAP_TOTAL_HEIGHT_DP =
+private val WEEKS_HEATMAP_HEIGHT_DP =
     MONTH_LABEL_HEIGHT_DP + 4 + CELL_SIZE_DP * 7 + CELL_SPACING_DP * 6

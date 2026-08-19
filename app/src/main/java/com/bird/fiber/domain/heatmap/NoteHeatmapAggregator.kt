@@ -3,6 +3,7 @@ package com.bird.fiber.domain.heatmap
 import com.bird.fiber.utils.parseQuickNoteDate
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 
 /**
@@ -88,6 +89,64 @@ object NoteHeatmapAggregator {
     fun recentYearWeekCount(today: LocalDate): Int {
         val todayRow = today.dayOfWeek.value - 1
         return (364 + todayRow) / 7 + 1
+    }
+
+    /**
+     * 构建某年的周网格：每列一周（周一在首行），覆盖该年 1 月 1 日到 12 月 31 日
+     *
+     * 首尾周补齐出的年外日期、晚于今天的日期都以 isFuture=true 占位（不渲染）
+     */
+    fun buildYearWeeks(
+        counts: Map<LocalDate, Int>,
+        year: Int,
+        today: LocalDate
+    ): List<List<HeatmapDay>> {
+        val firstMonday = LocalDate.of(year, 1, 1)
+            .minusDays((LocalDate.of(year, 1, 1).dayOfWeek.value - 1).toLong())
+        val lastDay = LocalDate.of(year, 12, 31)
+        val lastMonday = lastDay.minusDays((lastDay.dayOfWeek.value - 1).toLong())
+        val weeks = ((lastMonday.toEpochDay() - firstMonday.toEpochDay()) / 7 + 1).toInt()
+
+        return (0 until weeks).map { column ->
+            (0 until 7).map { row ->
+                val date = firstMonday.plusDays((column * 7 + row).toLong())
+                HeatmapDay(
+                    date = date,
+                    count = if (date.year == year) counts[date] ?: 0 else 0,
+                    isFuture = date.isAfter(today) || date.year != year
+                )
+            }
+        }
+    }
+
+    /**
+     * 构建单月日历网格：每行一周（周一在首列），月外日期以 null 占位
+     */
+    fun buildMonthRows(
+        counts: Map<LocalDate, Int>,
+        yearMonth: YearMonth,
+        today: LocalDate
+    ): List<List<HeatmapDay?>> {
+        val firstMonday = yearMonth.atDay(1)
+            .minusDays((yearMonth.atDay(1).dayOfWeek.value - 1).toLong())
+        val lastDay = yearMonth.atEndOfMonth()
+        val lastSunday = lastDay.plusDays(((7 - lastDay.dayOfWeek.value) % 7).toLong())
+        val days = (lastSunday.toEpochDay() - firstMonday.toEpochDay() + 1).toInt()
+
+        return (0 until days / 7).map { row ->
+            (0 until 7).map { column ->
+                val date = firstMonday.plusDays((row * 7 + column).toLong())
+                if (YearMonth.from(date) != yearMonth) {
+                    null
+                } else {
+                    HeatmapDay(
+                        date = date,
+                        count = counts[date] ?: 0,
+                        isFuture = date.isAfter(today)
+                    )
+                }
+            }
+        }
     }
 
     /**
