@@ -515,6 +515,8 @@ private fun AttachmentImage(
         },
         update = { imageView ->
             imageView.load(Uri.parse(attachment.uri)) {
+                // 网格缩略图按 512px 采样解码，避免相机原图全尺寸加载占内存
+                size(GRID_THUMBNAIL_PIXELS)
                 crossfade(true)
             }
         },
@@ -555,6 +557,8 @@ private fun AttachmentPreviewDialog(
                 },
                 update = { imageView ->
                     imageView.load(Uri.parse(attachment.uri)) {
+                        // 预览图按 2048px 采样，足够看清且不为超大原图付出解码成本
+                        size(PREVIEW_PIXELS)
                         crossfade(true)
                     }
                 },
@@ -597,3 +601,9 @@ private fun formatDate(timestamp: Long): String {
     if (timestamp <= 0L) return "未知日期"
     return DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(timestamp))
 }
+
+/** 网格缩略图的解码尺寸（px），两列瀑布流下已足够清晰 */
+private const val GRID_THUMBNAIL_PIXELS = 512
+
+/** 大图预览的解码尺寸（px），覆盖主流屏幕长边 */
+private const val PREVIEW_PIXELS = 2048
