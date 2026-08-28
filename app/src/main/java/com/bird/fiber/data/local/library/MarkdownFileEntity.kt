@@ -96,6 +96,15 @@ data class MarkdownFileEntity(
     val hasImage: Boolean = false,
 
     /**
+     * 第一张图片的路径（用于列表缩略图）
+     *
+     * 本地附件存归一化相对路径（attachments/xxx.jpg）；
+     * 外部图片存完整 URL；无图片时为空串
+     */
+    @ColumnInfo(name = "first_image_path")
+    val firstImagePath: String = "",
+
+    /**
      * 是否已删除（软删除标记）
      *
      * 0 = 未删除，1 = 已删除
@@ -117,6 +126,7 @@ fun MarkdownFileEntity.toMarkdownFileMeta(): MarkdownFileMeta {
         size = size,
         preview = contentPreview,
         hasImage = hasImage,
+        firstImagePath = firstImagePath,
         libraryId = libraryId
     )
 }
@@ -136,6 +146,7 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "size") val size: Long,
     @ColumnInfo(name = "content_preview") val contentPreview: String,
     @ColumnInfo(name = "has_image") val hasImage: Boolean,
+    @ColumnInfo(name = "first_image_path") val firstImagePath: String = "",
     @ColumnInfo(name = "library_id") val libraryId: String,
     @ColumnInfo(name = "library_name") val libraryName: String?,
     @ColumnInfo(name = "match_snippet") val matchSnippet: String? = null
@@ -176,6 +187,7 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         size = size,
         preview = contentPreview,
         hasImage = hasImage,
+        firstImagePath = firstImagePath,
         libraryId = libraryId,
         libraryName = libraryName.orEmpty(),
         // 命中片段截取自原始 Markdown 正文，转为纯文本后再展示

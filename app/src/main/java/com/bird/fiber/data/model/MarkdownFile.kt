@@ -12,6 +12,7 @@ package com.bird.fiber.data.model
  * @property lastModified 最后修改时间戳
  * @property size 文件大小（字节）
  * @property preview 内容预览（前几行，用于卡片展示）
+ * @property firstImagePath 第一张图片的路径（本地附件相对路径或外部 URL，用于列表缩略图）
  * @property matchSnippet 搜索命中位置附近的纯文本片段；仅搜索结果有值，为空时展示 [preview]
  */
 data class MarkdownFileMeta(
@@ -22,6 +23,7 @@ data class MarkdownFileMeta(
     val size: Long,
     val preview: String = "",
     val hasImage: Boolean = false,
+    val firstImagePath: String = "",
     val libraryId: String? = null,
     val libraryName: String = "",
     val matchSnippet: String? = null

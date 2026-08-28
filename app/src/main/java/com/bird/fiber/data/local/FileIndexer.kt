@@ -93,7 +93,8 @@ class FileIndexer internal constructor(
                         entry.file.toEntity(
                             contentPreview = previewReader.readFromContent(content),
                             contentText = content,
-                            hasImage = MarkdownUtils.containsImage(content)
+                            hasImage = MarkdownUtils.containsImage(content),
+                            firstImagePath = extractFirstImagePath(content)
                         )
                     }
                     writer.upsertBatch(filesToUpsert)
@@ -142,7 +143,8 @@ class FileIndexer internal constructor(
                     scannedFile = scannedFile,
                     contentPreview = previewReader.readFromContent(content),
                     contentText = content,
-                    hasImage = MarkdownUtils.containsImage(content)
+                    hasImage = MarkdownUtils.containsImage(content),
+                    firstImagePath = extractFirstImagePath(content)
                 )
                 Timber.d("FileIndexer: inserted file=%s", scannedFile.name)
                 true
@@ -193,6 +195,7 @@ class FileIndexer internal constructor(
                         contentPreview = previewReader.readFromContent(content),
                         contentText = content,
                         hasImage = MarkdownUtils.containsImage(content),
+                        firstImagePath = extractFirstImagePath(content),
                         lastModified = System.currentTimeMillis(),
                         // 调用方未传 size 时保留旧值，避免为计算字节数再复制一次大正文；
                         // 下次库同步会用文件系统的真实大小修正
@@ -206,6 +209,19 @@ class FileIndexer internal constructor(
                 Timber.e(e, "FileIndexer: update after save failed uri=%s", fileUri)
             }
         }
+    }
+
+    /**
+     * 提取正文第一张图片的可加载路径（列表缩略图用）
+     *
+     * 本地附件返回归一化相对路径（attachments/xxx.jpg），外部图片返回完整 URL；
+     * 无图片或路径非法时返回空串
+     */
+    private fun extractFirstImagePath(content: String): String {
+        val destination = MarkdownUtils.extractImageDestinations(content).firstOrNull()
+            ?: return ""
+        return normalizeAttachmentPath(destination)
+            ?: destination.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
     }
 
     private fun shouldGuardMassDeletion(

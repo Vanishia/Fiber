@@ -1,6 +1,7 @@
 package com.bird.fiber.utils
 
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Base64
 import java.net.URLDecoder
 
@@ -79,5 +80,31 @@ object UriHelper {
                 Base64.URL_SAFE or Base64.NO_WRAP
             )
         )
+    }
+
+    /**
+     * 由笔记 URI 和图片路径直接拼出图片的可加载 URI（零 IO，纯字符串/URI 运算）
+     *
+     * 附件约定存放在库根 attachments/ 下，document id 可沿树直接拼接，
+     * 不需要 DocumentFile.findFile 逐级查询；图片已被外部删除时
+     * Coil 加载会失败，由调用方显示占位。外部图片（http/https）原样返回
+     *
+     * @param noteUri 笔记的 SAF document URI
+     * @param imagePath 索引时存入 first_image_path 的路径
+     * @return 可加载的 URI 字符串；解析失败返回 null
+     */
+    fun resolveNoteImageUri(noteUri: String, imagePath: String): String? {
+        if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+            return imagePath
+        }
+        return runCatching {
+            val uri = Uri.parse(noteUri)
+            val rootDocumentId = DocumentsContract.getTreeDocumentId(uri)
+            val treeUri = DocumentsContract.buildTreeDocumentUri(uri.authority, rootDocumentId)
+            DocumentsContract.buildDocumentUriUsingTree(
+                treeUri,
+                "$rootDocumentId/$imagePath"
+            ).toString()
+        }.getOrNull()
     }
 }

@@ -26,13 +26,15 @@ class MarkdownIndexWriter(
         scannedFile: ScannedFile,
         contentPreview: String,
         contentText: String,
-        hasImage: Boolean
+        hasImage: Boolean,
+        firstImagePath: String = ""
     ) {
         markdownFileDao.insert(
             scannedFile.toEntity(
                 contentPreview = contentPreview,
                 contentText = contentText,
-                hasImage = hasImage
+                hasImage = hasImage,
+                firstImagePath = firstImagePath
             )
         )
     }

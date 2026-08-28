@@ -101,6 +101,36 @@ class FileIndexerTest {
     }
 
     @Test
+    fun updateFileAfterSave_extractsFirstImagePathForThumbnail() = runTest {
+        val updatedEntity = slot<MarkdownFileEntity>()
+        val existing = entityFile(uri = "file-uri", preview = "old-preview", lastModified = 100L, size = 10L)
+        coEvery { markdownFileDao.getFileByUri("file-uri") } returns existing
+        every { previewReader.readFromContent(any()) } returns "preview"
+        coEvery { writer.update(capture(updatedEntity)) } returns Unit
+
+        fileIndexer.updateFileAfterSave(
+            "file-uri",
+            "开头\n![图片](<attachments/a b.png>)\n![第二张](<attachments/c.png>)"
+        )
+
+        assertTrue(updatedEntity.captured.hasImage)
+        assertEquals("attachments/a b.png", updatedEntity.captured.firstImagePath)
+    }
+
+    @Test
+    fun updateFileAfterSave_withoutImage_clearsFirstImagePath() = runTest {
+        val updatedEntity = slot<MarkdownFileEntity>()
+        val existing = entityFile(uri = "file-uri", preview = "old-preview", lastModified = 100L, size = 10L)
+        coEvery { markdownFileDao.getFileByUri("file-uri") } returns existing
+        every { previewReader.readFromContent(any()) } returns "preview"
+        coEvery { writer.update(capture(updatedEntity)) } returns Unit
+
+        fileIndexer.updateFileAfterSave("file-uri", "纯文本正文")
+
+        assertEquals("", updatedEntity.captured.firstImagePath)
+    }
+
+    @Test
     fun updateFileAfterSave_usesProvidedFileSizeWithoutRecomputingBytes() = runTest {
         val updatedEntity = slot<MarkdownFileEntity>()
         val existing = entityFile(uri = "file-uri", preview = "old-preview", lastModified = 100L, size = 10L)

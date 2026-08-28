@@ -85,7 +85,7 @@ interface MarkdownFileDao {
      * 获取指定库的文件摘要（不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -100,7 +100,7 @@ interface MarkdownFileDao {
      * 共 200 字符，非开头处加省略号前缀）；仅标题/路径命中时回退为 content_preview
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -121,7 +121,7 @@ interface MarkdownFileDao {
     fun searchFilesSummary(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -142,7 +142,7 @@ interface MarkdownFileDao {
     fun searchFilesByRelevance(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -163,7 +163,7 @@ interface MarkdownFileDao {
     fun searchAllFilesByRelevance(query: String): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -253,7 +253,7 @@ interface MarkdownFileDao {
      * 让沉底的旧碎片有均等机会重新浮现
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -266,7 +266,7 @@ interface MarkdownFileDao {
      * 随机获取一条文件摘要（用于"随机漫步"，指定库范围）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -290,7 +290,7 @@ interface MarkdownFileDao {
      * 获取所有库的文件摘要（"全部笔记"页面，按修改时间倒序）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -309,7 +309,7 @@ interface MarkdownFileDao {
      * SQL 无法判断日期合法性，会被两个分支同时排除
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0

@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LibraryEntity::class,
         MarkdownFileEntity::class  // ✨ 新增
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class FiberDatabase : RoomDatabase() {
@@ -102,6 +102,19 @@ abstract class FiberDatabase : RoomDatabase() {
         }
 
         /**
+         * 数据库迁移：版本 4 -> 版本 5
+         *
+         * 添加 first_image_path（列表缩略图用的首图路径），
+         * 清空 content_preview 触发下次同步全量重索引来回填（沿用 3 -> 4 的做法）
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE markdown_files ADD COLUMN first_image_path TEXT NOT NULL DEFAULT ''")
+                database.execSQL("UPDATE markdown_files SET content_preview = ''")
+            }
+        }
+
+        /**
          * 获取数据库实例（单例模式）
          */
         fun getInstance(context: Context): FiberDatabase {
@@ -111,7 +124,7 @@ abstract class FiberDatabase : RoomDatabase() {
                     FiberDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
 
                 INSTANCE = instance

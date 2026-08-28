@@ -13,7 +13,8 @@ data class ScannedFile(
     fun toEntity(
         contentPreview: String = "",
         contentText: String = "",
-        hasImage: Boolean = false
+        hasImage: Boolean = false,
+        firstImagePath: String = ""
     ): MarkdownFileEntity {
         return MarkdownFileEntity(
             uri = uri,
@@ -25,6 +26,7 @@ data class ScannedFile(
             contentPreview = contentPreview,
             contentText = contentText,
             hasImage = hasImage,
+            firstImagePath = firstImagePath,
             isDeleted = 0
         )
     }
