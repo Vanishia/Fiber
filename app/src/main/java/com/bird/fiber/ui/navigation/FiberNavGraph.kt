@@ -255,7 +255,8 @@ fun FiberNavGraph(
             )
         ) {
             AttachmentManagerScreen(
-                onBackClick = ::popFromUser
+                onBackClick = ::popFromUser,
+                onFileClick = { fileUri -> navigateToEditor(fileUri, false) }
             )
         }
         }

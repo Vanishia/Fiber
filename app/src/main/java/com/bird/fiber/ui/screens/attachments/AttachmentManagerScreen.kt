@@ -5,6 +5,7 @@ import android.widget.ImageView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -87,6 +89,7 @@ import kotlin.math.roundToInt
 @Composable
 fun AttachmentManagerScreen(
     onBackClick: () -> Unit,
+    onFileClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AttachmentManagerViewModel = hiltViewModel()
 ) {
@@ -217,11 +220,31 @@ fun AttachmentManagerScreen(
                     }
                 },
                 onAttachmentLongClick = viewModel::startSelection,
+                onReferencesClick = viewModel::openLinkedNotes,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             )
         }
+    }
+
+    uiState.linkedNoteChoices?.let { choices ->
+        LinkedNoteChoicesDialog(
+            notes = choices,
+            onSelect = viewModel::openLinkedNote,
+            onDismiss = viewModel::dismissLinkedNoteChoices
+        )
+    }
+
+    uiState.viewingLinkedNote?.let { note ->
+        LinkedNoteSheet(
+            note = note,
+            onDismiss = viewModel::dismissLinkedNote,
+            onOpen = { fileUri ->
+                viewModel.dismissLinkedNote()
+                onFileClick(fileUri)
+            }
+        )
     }
 
     previewingAttachment?.let { attachment ->
@@ -266,6 +289,7 @@ private fun AttachmentManagerContent(
     onRetry: () -> Unit,
     onAttachmentClick: (ManagedAttachment) -> Unit,
     onAttachmentLongClick: (ManagedAttachment) -> Unit,
+    onReferencesClick: (ManagedAttachment) -> Unit,
     modifier: Modifier = Modifier
 ) {
     when {
@@ -296,7 +320,8 @@ private fun AttachmentManagerContent(
                     selectionMode = uiState.isSelecting,
                     referencesLoaded = uiState.referencesLoaded,
                     onClick = { onAttachmentClick(attachment) },
-                    onLongClick = { onAttachmentLongClick(attachment) }
+                    onLongClick = { onAttachmentLongClick(attachment) },
+                    onReferencesClick = { onReferencesClick(attachment) }
                 )
             }
         }
@@ -311,7 +336,8 @@ private fun AttachmentCard(
     selectionMode: Boolean,
     referencesLoaded: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onReferencesClick: () -> Unit
 ) {
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
@@ -378,7 +404,16 @@ private fun AttachmentCard(
             )
             Spacer(modifier = Modifier.size(6.dp))
             if (referencesLoaded) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(
+                            enabled = attachment.isReferenced,
+                            onClick = onReferencesClick
+                        )
+                        .padding(vertical = 2.dp)
+                ) {
                     Icon(
                         imageVector = if (attachment.isReferenced) Icons.Default.Link else Icons.Default.LinkOff,
                         contentDescription = null,
@@ -397,7 +432,11 @@ private fun AttachmentCard(
                             "未关联"
                         },
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (attachment.isReferenced) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             } else {

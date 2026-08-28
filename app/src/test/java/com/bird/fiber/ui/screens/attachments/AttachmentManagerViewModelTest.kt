@@ -3,11 +3,13 @@ package com.bird.fiber.ui.screens.attachments
 import androidx.lifecycle.SavedStateHandle
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.model.AttachmentDeletionSummary
 import com.bird.fiber.data.model.AttachmentReference
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.ManagedAttachment
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.repository.FileRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -31,12 +33,16 @@ class AttachmentManagerViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var attachmentRepository: AttachmentRepository
     private lateinit var libraryRepository: LibraryRepository
+    private lateinit var fileRepository: FileRepository
+    private lateinit var markdownFileDao: MarkdownFileDao
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         attachmentRepository = mockk()
         libraryRepository = mockk()
+        fileRepository = mockk()
+        markdownFileDao = mockk()
         coEvery { libraryRepository.getLibraryById(LIBRARY_ID) } returns LIBRARY
     }
 
@@ -128,9 +134,60 @@ class AttachmentManagerViewModelTest {
         assertEquals(REFERENCED.referencedBy, viewModel.uiState.value.attachments[1].referencedBy)
     }
 
+    @Test
+    fun openLinkedNotes_singleReference_opensNoteDirectly() = runTest {
+        coEvery { attachmentRepository.listForLibrary(LIBRARY_ID) } returns
+            FileResult.Success(QUICK_ATTACHMENTS)
+        coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } returns FileResult.Success(REFERENCE_MAP)
+        coEvery { markdownFileDao.getFileByUri("content://test/note") } returns null
+        coEvery { fileRepository.readFileContent("content://test/note") } returns
+            FileResult.Success("笔记全文")
+        val viewModel = createViewModel()
+
+        viewModel.openLinkedNotes(REFERENCED)
+
+        val state = viewModel.uiState.value
+        assertEquals(null, state.linkedNoteChoices)
+        assertEquals("content://test/note", state.viewingLinkedNote?.fileUri)
+        assertEquals("笔记全文", state.viewingLinkedNote?.content)
+    }
+
+    @Test
+    fun openLinkedNotes_multipleReferences_showsChoicesThenSelectedNote() = runTest {
+        val references = listOf(
+            AttachmentReference("content://test/note-a", "note-a"),
+            AttachmentReference("content://test/note-b", "note-b")
+        )
+        val multiReferenced = REFERENCED.copy(referencedBy = references)
+        coEvery { attachmentRepository.listForLibrary(LIBRARY_ID) } returns
+            FileResult.Success(listOf(multiReferenced))
+        coEvery {
+            attachmentRepository.loadReferencesForLibrary(LIBRARY_ID, any())
+        } returns FileResult.Success(mapOf(multiReferenced.uri to references))
+        coEvery { markdownFileDao.getFileByUri(any()) } returns null
+        coEvery { fileRepository.readFileContent(any()) } returns FileResult.Success("内容")
+        val viewModel = createViewModel()
+
+        viewModel.openLinkedNotes(multiReferenced)
+
+        val choices = viewModel.uiState.value.linkedNoteChoices
+        assertEquals(2, choices?.size)
+        assertEquals(null, viewModel.uiState.value.viewingLinkedNote)
+
+        viewModel.openLinkedNote(choices!!.first())
+
+        val state = viewModel.uiState.value
+        assertEquals(null, state.linkedNoteChoices)
+        assertEquals("content://test/note-a", state.viewingLinkedNote?.fileUri)
+    }
+
     private fun createViewModel() = AttachmentManagerViewModel(
         attachmentRepository = attachmentRepository,
         libraryRepository = libraryRepository,
+        fileRepository = fileRepository,
+        markdownFileDao = markdownFileDao,
         savedStateHandle = SavedStateHandle(mapOf("libraryId" to LIBRARY_ID))
     )
 

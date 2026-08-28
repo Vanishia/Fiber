@@ -4,21 +4,27 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
+import com.bird.fiber.data.model.AttachmentReference
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.ManagedAttachment
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.repository.FileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
 class AttachmentManagerViewModel @Inject constructor(
     private val attachmentRepository: AttachmentRepository,
     private val libraryRepository: LibraryRepository,
+    private val fileRepository: FileRepository,
+    private val markdownFileDao: MarkdownFileDao,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -166,6 +172,62 @@ class AttachmentManagerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(message = null)
     }
 
+    /**
+     * 打开附件的关联笔记
+     *
+     * 只有一篇时直接弹出笔记预览；多篇时先弹出选择菜单（文件名 + 摘要）
+     */
+    fun openLinkedNotes(attachment: ManagedAttachment) {
+        if (!_uiState.value.referencesLoaded || !attachment.isReferenced) return
+        viewModelScope.launch {
+            val notes = attachment.referencedBy.map { loadLinkedNote(it) }
+            if (notes.size == 1) {
+                _uiState.value = _uiState.value.copy(viewingLinkedNote = notes.first())
+            } else {
+                _uiState.value = _uiState.value.copy(linkedNoteChoices = notes)
+            }
+        }
+    }
+
+    /** 从多篇关联笔记的菜单中选定一篇，弹出笔记预览 */
+    fun openLinkedNote(note: LinkedNote) {
+        _uiState.value = _uiState.value.copy(
+            linkedNoteChoices = null,
+            viewingLinkedNote = note
+        )
+    }
+
+    fun dismissLinkedNoteChoices() {
+        _uiState.value = _uiState.value.copy(linkedNoteChoices = null)
+    }
+
+    fun dismissLinkedNote() {
+        _uiState.value = _uiState.value.copy(viewingLinkedNote = null)
+    }
+
+    /**
+     * 读取关联笔记的元信息和全文
+     *
+     * 文件名/摘要优先取索引；全文读取失败时 content 为 null，界面退回展示摘要
+     */
+    private suspend fun loadLinkedNote(reference: AttachmentReference): LinkedNote {
+        val entity = runCatching { markdownFileDao.getFileByUri(reference.fileUri) }
+            .onFailure { Timber.e(it, "Failed to load linked note meta") }
+            .getOrNull()
+        val content = runCatching { fileRepository.readFileContent(reference.fileUri) }
+            .onFailure { Timber.e(it, "Failed to read linked note content") }
+            .getOrNull()
+            ?.let { it as? FileResult.Success }
+            ?.data
+        return LinkedNote(
+            fileUri = reference.fileUri,
+            fileName = entity?.name ?: reference.fileName.removeSuffix(".md"),
+            preview = entity?.contentPreview ?: content?.take(PREVIEW_FALLBACK_CHARS).orEmpty(),
+            content = content,
+            lastModified = entity?.lastModified ?: 0L
+        )
+    }
+
     fun retryReferences() {
         val attachments = _uiState.value.attachments
         if (attachments.isEmpty() || _uiState.value.isReferencesLoading) return
@@ -204,5 +266,8 @@ class AttachmentManagerViewModel @Inject constructor(
 
     companion object {
         const val ARG_LIBRARY_ID = "libraryId"
+
+        /** 笔记未被索引时，取正文开头多少字符作为摘要 */
+        private const val PREVIEW_FALLBACK_CHARS = 200
     }
 }
