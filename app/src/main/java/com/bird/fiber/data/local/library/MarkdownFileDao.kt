@@ -196,6 +196,19 @@ interface MarkdownFileDao {
     @Query("SELECT uri FROM markdown_files WHERE library_id = :libraryId AND is_deleted = 0")
     suspend fun getAllUrisByLibrary(libraryId: String): List<String>
 
+    /**
+     * 获取指定库所有含图片笔记的全文（用于附件引用扫描）
+     *
+     * 附件管理页计算"哪些笔记引用了某张图片"时改从索引库取全文，
+     * 避免遍历文件系统逐篇读取；has_image = 1 预过滤掉无图笔记
+     */
+    @Query("""
+        SELECT uri, name, content_text FROM markdown_files
+        WHERE library_id = :libraryId AND is_deleted = 0
+          AND has_image = 1 AND content_text != ''
+    """)
+    suspend fun getImageNoteContentsByLibrary(libraryId: String): List<MarkdownImageNoteContent>
+
     @Query("""
         SELECT uri, last_modified,
                CASE WHEN content_preview = '' THEN 0 ELSE 1 END AS has_preview,

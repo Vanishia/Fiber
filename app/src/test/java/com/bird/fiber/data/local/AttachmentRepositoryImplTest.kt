@@ -5,7 +5,11 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
+import com.bird.fiber.data.local.library.MarkdownImageNoteContent
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.ManagedAttachment
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -25,6 +29,7 @@ class AttachmentRepositoryImplTest {
     private val context = mockk<Context>()
     private val contentResolver = mockk<ContentResolver>()
     private val libraryRepository = mockk<LibraryRepository>()
+    private val markdownFileDao = mockk<MarkdownFileDao>()
     private lateinit var repository: AttachmentRepositoryImpl
 
     @Before
@@ -32,7 +37,7 @@ class AttachmentRepositoryImplTest {
         mockkStatic(Uri::class)
         mockkStatic(DocumentsContract::class)
         every { context.contentResolver } returns contentResolver
-        repository = AttachmentRepositoryImpl(context, libraryRepository)
+        repository = AttachmentRepositoryImpl(context, libraryRepository, markdownFileDao)
     }
 
     @After
@@ -77,6 +82,41 @@ class AttachmentRepositoryImplTest {
 
         require(result is FileResult.Error)
         assertTrue(result.error is com.bird.fiber.data.model.FileError.PermissionDenied)
+    }
+
+    @Test
+    fun loadReferences_matchesAgainstIndexedNoteContents() = runTest {
+        val attachment = ManagedAttachment(
+            displayName = "a.png",
+            relativePath = "attachments/a.png",
+            uri = "content://test/attachments/a.png",
+            mimeType = "image/png",
+            size = 1L,
+            lastModified = 1L,
+            width = 1,
+            height = 1,
+            referencedBy = emptyList()
+        )
+        coEvery { markdownFileDao.getImageNoteContentsByLibrary("lib") } returns listOf(
+            MarkdownImageNoteContent(
+                uri = "content://test/note-1",
+                name = "note-1",
+                contentText = "![图片](<attachments/a.png>)"
+            ),
+            MarkdownImageNoteContent(
+                uri = "content://test/note-2",
+                name = "note-2",
+                contentText = "没有图片的正文"
+            )
+        )
+
+        val result = repository.loadReferencesForLibrary("lib", listOf(attachment))
+
+        require(result is FileResult.Success)
+        assertEquals(
+            listOf("content://test/note-1"),
+            result.data.getValue(attachment.uri).map { it.fileUri }
+        )
     }
 
     @Test

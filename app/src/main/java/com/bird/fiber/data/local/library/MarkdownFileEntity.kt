@@ -149,6 +149,17 @@ data class MarkdownIndexSnapshot(
 )
 
 /**
+ * 附件引用扫描用的投影——含图片笔记的全文
+ *
+ * 只在附件管理页计算关联关系时使用，替代逐篇读取文件系统
+ */
+data class MarkdownImageNoteContent(
+    @ColumnInfo(name = "uri") val uri: String,
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "content_text") val contentText: String
+)
+
+/**
  * 热力图聚合用的最小投影——只取文件名和修改时间，避免加载正文
  */
 data class MarkdownHeatmapEntry(

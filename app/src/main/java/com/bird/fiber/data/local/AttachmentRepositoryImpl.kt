@@ -9,6 +9,7 @@ import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import androidx.core.net.toUri
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.data.model.AttachmentDeletionSummary
 import com.bird.fiber.data.model.AttachmentReference
@@ -28,7 +29,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,7 +36,8 @@ import javax.inject.Singleton
 @Singleton
 class AttachmentRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val libraryRepository: LibraryRepository
+    private val libraryRepository: LibraryRepository,
+    private val markdownFileDao: MarkdownFileDao
 ) : AttachmentRepository {
 
     override suspend fun copyImage(
@@ -188,9 +189,6 @@ class AttachmentRepositoryImpl @Inject constructor(
         if (attachments.isEmpty()) return@withContext FileResult.Success(emptyMap())
 
         try {
-            val library = libraryRepository.getLibraryById(libraryId)
-                ?: return@withContext FileResult.Error(FileError.NotFound(libraryId))
-
             // 每个附件的旧式引用正则只编译一次
             val matchers = attachments.map { attachment ->
                 AttachmentReferenceMatcher(
@@ -200,18 +198,11 @@ class AttachmentRepositoryImpl @Inject constructor(
             }
             val references = attachments.associate { it.uri to mutableListOf<AttachmentReference>() }
 
-            // 流式比对：每次只在内存中保留一个 Markdown 文件的正文
-            MarkdownFileScanner().scan(
-                contentResolver = context.contentResolver,
-                folderUri = library.folderUri,
-                libraryId = libraryId
-            ).forEach { file ->
-                val content = try {
-                    readMarkdownContent(file.uri)
-                } catch (e: Exception) {
-                    Timber.w(e, "AttachmentRepository: skip unreadable file=%s", file.uri)
-                    return@forEach
-                }
+            // 笔记全文已由 FileIndexer 同步进索引库（content_text），
+            // 直接查库做内存匹配，避免遍历文件系统逐篇读取；
+            // content_text 为空的行（读取失败/空文件）查不出来，与旧逻辑读失败跳过行为一致
+            markdownFileDao.getImageNoteContentsByLibrary(libraryId).forEach { file ->
+                val content = file.contentText
                 val destinations = MarkdownUtils.extractImageDestinations(content)
                     .mapNotNull(::normalizeAttachmentPath)
                     .toSet()
@@ -334,12 +325,6 @@ class AttachmentRepositoryImpl @Inject constructor(
             }
             options.outWidth to options.outHeight
         }.getOrDefault(0 to 0)
-    }
-
-    private fun readMarkdownContent(uri: String): String {
-        return context.contentResolver.openInputStream(uri.toUri())?.bufferedReader()?.use {
-            it.readText()
-        } ?: throw IOException("无法读取 Markdown 文件: $uri")
     }
 
     companion object {
