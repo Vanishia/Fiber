@@ -66,10 +66,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,6 +94,7 @@ fun AttachmentManagerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showFilterMenu by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var previewingAttachment by remember { mutableStateOf<ManagedAttachment?>(null) }
 
     BackHandler(enabled = uiState.isSelecting) { viewModel.clearSelection() }
 
@@ -206,7 +210,11 @@ fun AttachmentManagerScreen(
                 uiState = uiState,
                 onRetry = viewModel::loadAttachments,
                 onAttachmentClick = { attachment ->
-                    if (uiState.isSelecting) viewModel.toggleSelection(attachment)
+                    if (uiState.isSelecting) {
+                        viewModel.toggleSelection(attachment)
+                    } else {
+                        previewingAttachment = attachment
+                    }
                 },
                 onAttachmentLongClick = viewModel::startSelection,
                 modifier = Modifier
@@ -214,6 +222,13 @@ fun AttachmentManagerScreen(
                     .weight(1f)
             )
         }
+    }
+
+    previewingAttachment?.let { attachment ->
+        AttachmentPreviewDialog(
+            attachment = attachment,
+            onDismiss = { previewingAttachment = null }
+        )
     }
 
     if (showDeleteConfirmation) {
@@ -466,6 +481,48 @@ private fun AttachmentImage(
         },
         modifier = modifier.clipToBounds()
     )
+}
+
+/**
+ * 图片大图预览——全屏黑色背景，FIT_CENTER 完整显示图片
+ *
+ * 点击任意位置或按返回键关闭
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AttachmentPreviewDialog(
+    attachment: ManagedAttachment,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .combinedClickable(
+                    onClick = onDismiss,
+                    onLongClick = null
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AndroidView(
+                factory = { context ->
+                    ImageView(context).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }
+                },
+                update = { imageView ->
+                    imageView.load(Uri.parse(attachment.uri)) {
+                        crossfade(true)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
 }
 
 @Composable
