@@ -1,4 +1,4 @@
-﻿package com.bird.fiber.domain.sync
+package com.bird.fiber.domain.sync
 
 import android.content.ContentResolver
 import com.bird.fiber.data.event.AppEvent
@@ -225,12 +225,32 @@ class LibrarySyncManager @Inject constructor(
         libraries.forEach { library ->
             val folderUri = library.folderUri
             Timber.d("StartupTrace: sync library begin id=${library.id} name=${library.name}")
+            // 只有全量重建索引（如数据库升级回填，待处理数达到阈值）才广播进度事件，
+            // 让主界面显示进度页；少量增量更新静默完成，避免界面无意义闪烁
+            var reindexVisible = false
             when (val result = fileIndexer.syncLibrary(
                 contentResolver = contentResolver,
                 libraryId = library.id,
                 folderUri = folderUri,
                 reason = reason,
                 onProgress = { current, total ->
+                    // 进度事件做节流（首尾必发、其余每 5 个发一次），
+                    // 防止事件洪峰挤掉缓冲里的 SyncStarted（缓冲区溢出丢弃最旧）
+                    val shouldReport = current == 0 || current == total ||
+                        current % REINDEX_PROGRESS_EVERY == 0
+                    if (total >= REINDEX_PROGRESS_MIN_TOTAL && shouldReport) {
+                        if (!reindexVisible) {
+                            reindexVisible = true
+                            eventBus.tryEmit(AppEvent.SyncStarted(library.id, isReindex = true))
+                        }
+                        eventBus.tryEmit(
+                            AppEvent.SyncProgress(
+                                libraryId = library.id,
+                                processed = current,
+                                total = total
+                            )
+                        )
+                    }
                     onProgress?.invoke(library.name, current, total)
                 }
             )) {
@@ -254,6 +274,9 @@ class LibrarySyncManager @Inject constructor(
                     logSyncFailure("LibrarySyncManager: library sync failed name=${library.name}", result.error)
                 }
             }
+            if (reindexVisible) {
+                eventBus.emit(AppEvent.SyncCompleted(library.id))
+            }
         }
 
         return activeLibraryChangedCount
@@ -265,5 +288,17 @@ class LibrarySyncManager @Inject constructor(
             is SyncFailure.FolderUnavailable -> Timber.e(failure.cause, "%s reason=FolderUnavailable folder=%s detail=%s", message, failure.folderUri, failure.reason)
             is SyncFailure.UnknownFailure -> Timber.e(failure.cause, "%s reason=UnknownFailure", message)
         }
+    }
+
+    private companion object {
+        /**
+         * 待重建索引的文件数达到该阈值才广播进度事件（显示"数据库更新中"进度页）
+         *
+         * 数据库升级回填通常是全库量级；库很小的场景重建本身瞬间完成，无需提示
+         */
+        const val REINDEX_PROGRESS_MIN_TOTAL = 20
+
+        /** 重建索引进度事件的节流间隔（首尾必发） */
+        const val REINDEX_PROGRESS_EVERY = 5
     }
 }

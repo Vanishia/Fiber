@@ -240,6 +240,7 @@ class FileListViewModel @Inject constructor(
                         Timber.d("FileListViewModel: sync started ${event.libraryId}")
                         _uiState.value = _uiState.value.copy(
                             isSyncing = true,
+                            isReindexing = event.isReindex,
                             syncProcessed = 0,
                             syncTotal = null
                         )
@@ -256,6 +257,7 @@ class FileListViewModel @Inject constructor(
                         Timber.d("FileListViewModel: sync completed ${event.libraryId}")
                         _uiState.value = _uiState.value.copy(
                             isSyncing = false,
+                            isReindexing = false,
                             syncProcessed = 0,
                             syncTotal = null
                         )

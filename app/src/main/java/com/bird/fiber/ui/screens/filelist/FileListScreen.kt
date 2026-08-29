@@ -163,19 +163,23 @@ fun FileListScreen(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = if (total == null) {
-                                "正在扫描笔记库..."
-                            } else if (total > 0) {
-                                "正在导入笔记 ${uiState.syncProcessed} / $total"
-                            } else {
-                                "正在更新笔记索引..."
+                            text = when {
+                                // 数据库升级后的全量重建：明确告知不会动本地文件
+                                uiState.isReindexing -> "数据库更新中，不会修改本地文件"
+                                total == null -> "正在扫描笔记库..."
+                                total > 0 -> "正在导入笔记 ${uiState.syncProcessed} / $total"
+                                else -> "正在更新笔记索引..."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "笔记较多时可能需要一些时间",
+                            text = if (uiState.isReindexing && total != null && total > 0) {
+                                "已更新 ${uiState.syncProcessed} / $total"
+                            } else {
+                                "笔记较多时可能需要一些时间"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

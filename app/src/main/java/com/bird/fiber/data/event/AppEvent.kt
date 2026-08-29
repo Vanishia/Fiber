@@ -34,8 +34,11 @@ sealed class AppEvent {
 
     /**
      * 开始同步库
+     *
+     * @param isReindex true 表示这是一次全量重建索引（如数据库升级后回填），
+     * 界面应提示"数据库更新中"而非"导入笔记"
      */
-    data class SyncStarted(val libraryId: String) : AppEvent()
+    data class SyncStarted(val libraryId: String, val isReindex: Boolean = false) : AppEvent()
 
     data class SyncProgress(
         val libraryId: String,
