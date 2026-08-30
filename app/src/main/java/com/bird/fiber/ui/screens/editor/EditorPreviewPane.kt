@@ -35,7 +35,9 @@ internal fun EditorPreviewPane(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        if (isRendering) {
+        // 只有首次渲染（还没有任何内容）才整屏 loading；
+        // 后续重渲染保留旧内容，避免图片等资源未就绪时整屏空白闪烁
+        if (isRendering && renderedMarkdown == null) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else {
             MarkdownPreview(

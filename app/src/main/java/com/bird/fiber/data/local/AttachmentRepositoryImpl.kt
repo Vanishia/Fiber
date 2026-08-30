@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +40,11 @@ class AttachmentRepositoryImpl @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val markdownFileDao: MarkdownFileDao
 ) : AttachmentRepository {
+
+    // 附件相对路径解析缓存：SAF DocumentFile 逐级 findFile 代价高，
+    // 预览每次重渲染都会对同一批图片路径全量解析一遍，这里按笔记缓存结果
+    // （空串表示解析失败的负缓存）；附件增删时整体清空，避免脏数据
+    private val resolveUriCache = ConcurrentHashMap<String, String>()
 
     override suspend fun copyImage(
         sourceUri: String,
@@ -91,6 +97,7 @@ class AttachmentRepositoryImpl @Inject constructor(
             }
 
             val actualFileName = createdFile.name ?: fileName
+            resolveUriCache.clear()
             FileResult.Success(
                 Attachment(
                     displayName = actualFileName,
@@ -114,6 +121,7 @@ class AttachmentRepositoryImpl @Inject constructor(
         try {
             val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri.toUri())
             if (deleted) {
+                resolveUriCache.clear()
                 FileResult.Success(Unit)
             } else {
                 FileResult.Error(FileError.IOFailed(uri, IllegalStateException("无法删除附件")))
@@ -266,6 +274,9 @@ class AttachmentRepositoryImpl @Inject constructor(
                             }
                         }
 
+                        if (deletedCount > 0) {
+                            resolveUriCache.clear()
+                        }
                         FileResult.Success(
                             AttachmentDeletionSummary(
                                 deletedCount = deletedCount,
@@ -285,19 +296,28 @@ class AttachmentRepositoryImpl @Inject constructor(
             return null
         }
 
-        return try {
+        val cacheKey = "$markdownFileUri|$normalized"
+        resolveUriCache[cacheKey]?.let { return it.ifEmpty { null } }
+
+        val resolved = runCatching {
             val noteUri = markdownFileUri.toUri()
             val rootDocumentId = DocumentsContract.getTreeDocumentId(noteUri)
             val treeUri = DocumentsContract.buildTreeDocumentUri(noteUri.authority, rootDocumentId)
-            var current = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-            normalized.split('/').forEach { segment ->
-                current = current.findFile(segment) ?: return null
+            var current = DocumentFile.fromTreeUri(context, treeUri)
+            for (segment in normalized.split('/')) {
+                current = current?.findFile(segment)
             }
-            current.uri.toString()
-        } catch (e: Exception) {
-            Timber.w(e, "AttachmentRepository: resolve failed path=%s", relativePath)
+            current?.uri?.toString()
+        }.getOrElse {
+            Timber.w(it, "AttachmentRepository: resolve failed path=%s", relativePath)
             null
         }
+
+        if (resolveUriCache.size >= RESOLVE_CACHE_MAX_ENTRIES) {
+            resolveUriCache.clear()
+        }
+        resolveUriCache[cacheKey] = resolved.orEmpty()
+        return resolved
     }
 
     private fun queryDisplayName(sourceUri: Uri): String? {
@@ -330,6 +350,7 @@ class AttachmentRepositoryImpl @Inject constructor(
     companion object {
         const val ATTACHMENTS_DIRECTORY = "attachments"
         private val EXTENSION_PATTERN = Regex("[a-z0-9]{1,8}")
+        private const val RESOLVE_CACHE_MAX_ENTRIES = 2000
     }
 }
 
