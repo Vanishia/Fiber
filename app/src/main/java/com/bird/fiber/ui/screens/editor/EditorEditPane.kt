@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
+import kotlin.math.roundToInt
 
 @Composable
 internal fun EditorEditPane(
@@ -46,8 +48,29 @@ internal fun EditorEditPane(
     var associationMenuExpanded by remember { mutableStateOf(false) }
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
     var cursorBounds by remember { mutableStateOf(Rect.Zero) }
+    // 光标在滚动内容坐标系中的位置（含顶部 inset），用于光标可见性兜底
+    var cursorContentRect by remember { mutableStateOf<Rect?>(null) }
+    val topInsetPx = with(density) { topContentInset.toPx() }
+    val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onImageSelected(it.toString()) }
+    }
+
+    // 键盘弹起/收起会改变可视区域高度，而 BasicTextField 自带的跟随光标
+    // 只在输入时触发；长文下键盘弹起后光标可能被甩出屏幕（界面停在底部、
+    // 光标还在顶部），这里兜底把光标滚回可视范围
+    LaunchedEffect(scrollState.viewportSize, value.selection, cursorContentRect) {
+        val rect = cursorContentRect ?: return@LaunchedEffect
+        val viewportHeight = scrollState.viewportSize
+        if (viewportHeight <= 0) return@LaunchedEffect
+        val visibleTop = scrollState.value.toFloat()
+        val visibleBottom = visibleTop + viewportHeight.toFloat()
+        val target = when {
+            rect.top < visibleTop -> rect.top - cursorRevealMarginPx
+            rect.bottom > visibleBottom -> rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
+            else -> return@LaunchedEffect
+        }
+        scrollState.scrollTo(target.roundToInt().coerceIn(0, scrollState.maxValue))
     }
 
     Box(
@@ -75,10 +98,9 @@ internal fun EditorEditPane(
             onTextLayout = { layoutResult ->
                 val caret = value.selection.start.coerceIn(0, value.text.length)
                 val rect = layoutResult.getCursorRect(caret)
-                val topInsetPx = with(density) { topContentInset.toPx() }
-                cursorBounds = rect.translate(
-                    Offset(x = 0f, y = topInsetPx - scrollState.value)
-                )
+                val contentRect = rect.translate(Offset(x = 0f, y = topInsetPx))
+                cursorContentRect = contentRect
+                cursorBounds = contentRect.translate(Offset(x = 0f, y = -scrollState.value.toFloat()))
             },
             decorationBox = { innerTextField ->
                 Box(
