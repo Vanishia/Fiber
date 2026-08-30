@@ -5,6 +5,7 @@ import android.util.TypedValue
 import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.widget.TextViewCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.image.AsyncDrawableScheduler
+import kotlin.math.roundToInt
 
 @Composable
 internal fun EditorPreviewPane(
@@ -63,12 +65,15 @@ private fun MarkdownPreview(
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
     val backgroundColor = LocalFiberSurfaceColors.current.pageBackground.toArgb()
     val textSizePx = with(density) { bodyStyle.fontSize.toPx() }
+    // 与编辑视图一致：精确行高 = 字号 × 共用倍数
+    val lineHeightPx = with(density) { (bodyStyle.fontSize * BODY_LINE_HEIGHT_MULTIPLIER).toPx().roundToInt() }
     val topInsetPx = with(density) { topContentInset.roundToPx() }
     val bottomInsetPx = with(density) { (bottomContentInset + 12.dp).roundToPx() }
 
     // 缓存上次应用的值，避免不必要的 requestLayout
     var lastRenderedText by remember { mutableStateOf<Spanned?>(null) }
     var lastTextSizePx by remember { mutableStateOf(0f) }
+    var lastLineHeightPx by remember { mutableStateOf(0) }
     var lastTopInsetPx by remember { mutableStateOf(0) }
     var lastBottomInsetPx by remember { mutableStateOf(0) }
 
@@ -119,6 +124,12 @@ private fun MarkdownPreview(
                 needsLayout = true
             }
 
+            if (lastLineHeightPx != lineHeightPx) {
+                TextViewCompat.setLineHeight(textView, lineHeightPx)
+                lastLineHeightPx = lineHeightPx
+                needsLayout = true
+            }
+
             if (lastTopInsetPx != topInsetPx || lastBottomInsetPx != bottomInsetPx) {
                 textView.setPadding(0, topInsetPx, 0, bottomInsetPx)
                 lastTopInsetPx = topInsetPx
@@ -126,8 +137,7 @@ private fun MarkdownPreview(
                 needsLayout = true
             }
 
-            // 颜色/行间距变化不需要 requestLayout
-            textView.setLineSpacing(0f, 1.05f)
+            // 颜色变化不需要 requestLayout
             textView.setTextColor(textColor)
             textView.setLinkTextColor(linkColor)
             textView.setBackgroundColor(backgroundColor)

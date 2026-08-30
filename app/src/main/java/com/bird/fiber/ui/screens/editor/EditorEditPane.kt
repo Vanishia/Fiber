@@ -91,8 +91,8 @@ internal fun EditorEditPane(
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                // 行间距比默认字距稍微加大一点点（约 1.25 倍字号）
-                lineHeight = MaterialTheme.typography.bodyLarge.fontSize * 1.25f
+                // 与预览视图共用的行距倍数，保证两种模式排版一致
+                lineHeight = MaterialTheme.typography.bodyLarge.fontSize * BODY_LINE_HEIGHT_MULTIPLIER
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             onTextLayout = { layoutResult ->
