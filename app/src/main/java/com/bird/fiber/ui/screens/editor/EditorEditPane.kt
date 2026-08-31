@@ -4,7 +4,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -31,6 +35,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
@@ -45,32 +51,50 @@ internal fun EditorEditPane(
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     var associationMenuExpanded by remember { mutableStateOf(false) }
     var associationTriggerIndex by remember { mutableStateOf<Int?>(null) }
     var cursorBounds by remember { mutableStateOf(Rect.Zero) }
-    // 光标在滚动内容坐标系中的位置（含顶部 inset），用于光标可见性兜底
-    var cursorContentRect by remember { mutableStateOf<Rect?>(null) }
+    // 最近一次文本布局结果；键盘弹起等视口变化时按"当前"光标位置校正滚动，
+    // 不能直接缓存光标矩形（onTextLayout 不随纯选区变化回调，缓存会过期）
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onImageSelected(it.toString()) }
     }
 
-    // 键盘弹起/收起会改变可视区域高度，而 BasicTextField 自带的跟随光标
-    // 只在输入时触发；长文下键盘弹起后光标可能被甩出屏幕（界面停在底部、
-    // 光标还在顶部），这里兜底把光标滚回可视范围
-    LaunchedEffect(scrollState.viewportSize, value.selection, cursorContentRect) {
-        val rect = cursorContentRect ?: return@LaunchedEffect
+    // 光标不在可视范围时把它滚回来；光标可见时不做任何事，不与手动滚动打架
+    fun revealCursorIfNeeded() {
+        val layout = textLayoutResult ?: return
         val viewportHeight = scrollState.viewportSize
-        if (viewportHeight <= 0) return@LaunchedEffect
+        if (viewportHeight <= 0) return
+        val caret = value.selection.start.coerceIn(0, value.text.length)
+        val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
         val target = when {
             rect.top < visibleTop -> rect.top - cursorRevealMarginPx
             rect.bottom > visibleBottom -> rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
-            else -> return@LaunchedEffect
+            else -> return
         }
-        scrollState.scrollTo(target.roundToInt().coerceIn(0, scrollState.maxValue))
+        val coerced = target.roundToInt().coerceIn(0, scrollState.maxValue)
+        if (coerced != scrollState.value) {
+            scope.launch { scrollState.scrollTo(coerced) }
+        }
+    }
+
+    // 键盘弹起/收起改变可视高度时，BasicTextField 自带的跟随光标只在输入时触发，
+    // 系统侧还会尝试把焦点区域滚进屏幕，长文下会错误地滚到最后一行；
+    // 动画期间逐帧校正，并在动画结束后再延迟补一次，确保最终停在光标处
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    LaunchedEffect(scrollState.viewportSize, value.selection) {
+        revealCursorIfNeeded()
+        delay(300)
+        revealCursorIfNeeded()
+    }
+    LaunchedEffect(imeBottomPx) {
+        revealCursorIfNeeded()
     }
 
     Box(
@@ -96,11 +120,12 @@ internal fun EditorEditPane(
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             onTextLayout = { layoutResult ->
+                textLayoutResult = layoutResult
                 val caret = value.selection.start.coerceIn(0, value.text.length)
                 val rect = layoutResult.getCursorRect(caret)
-                val contentRect = rect.translate(Offset(x = 0f, y = topInsetPx))
-                cursorContentRect = contentRect
-                cursorBounds = contentRect.translate(Offset(x = 0f, y = -scrollState.value.toFloat()))
+                cursorBounds = rect.translate(
+                    Offset(x = 0f, y = topInsetPx - scrollState.value)
+                )
             },
             decorationBox = { innerTextField ->
                 Box(
