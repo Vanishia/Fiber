@@ -46,6 +46,16 @@ class AttachmentRepositoryImpl @Inject constructor(
     // （空串表示解析失败的负缓存）；附件增删时整体清空，避免脏数据
     private val resolveUriCache = ConcurrentHashMap<String, String>()
 
+    // attachments 目录清单缓存（key 为库根 treeUri，value 为 文件名 -> 文件 uri）：
+    // 一次 listFiles 即可解析整篇笔记的全部平铺附件，
+    // 避免每张图片各自逐级 findFile，显著加快含图笔记的首次渲染
+    private val attachmentListingCache = ConcurrentHashMap<String, Map<String, String>>()
+
+    private fun clearResolveCaches() {
+        resolveUriCache.clear()
+        attachmentListingCache.clear()
+    }
+
     override suspend fun copyImage(
         sourceUri: String,
         target: LibraryTarget?
@@ -97,7 +107,7 @@ class AttachmentRepositoryImpl @Inject constructor(
             }
 
             val actualFileName = createdFile.name ?: fileName
-            resolveUriCache.clear()
+            clearResolveCaches()
             FileResult.Success(
                 Attachment(
                     displayName = actualFileName,
@@ -121,7 +131,7 @@ class AttachmentRepositoryImpl @Inject constructor(
         try {
             val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri.toUri())
             if (deleted) {
-                resolveUriCache.clear()
+                clearResolveCaches()
                 FileResult.Success(Unit)
             } else {
                 FileResult.Error(FileError.IOFailed(uri, IllegalStateException("无法删除附件")))
@@ -275,7 +285,7 @@ class AttachmentRepositoryImpl @Inject constructor(
                         }
 
                         if (deletedCount > 0) {
-                            resolveUriCache.clear()
+                            clearResolveCaches()
                         }
                         FileResult.Success(
                             AttachmentDeletionSummary(
@@ -303,11 +313,13 @@ class AttachmentRepositoryImpl @Inject constructor(
             val noteUri = markdownFileUri.toUri()
             val rootDocumentId = DocumentsContract.getTreeDocumentId(noteUri)
             val treeUri = DocumentsContract.buildTreeDocumentUri(noteUri.authority, rootDocumentId)
-            var current = DocumentFile.fromTreeUri(context, treeUri)
-            for (segment in normalized.split('/')) {
-                current = current?.findFile(segment)
+            val fileName = normalized.substringAfter("$ATTACHMENTS_DIRECTORY/")
+            // 平铺附件优先走目录清单缓存：一次 listFiles 解析整篇笔记的全部图片；
+            // 清单不可用（权限/异常）或带子目录的路径才回退逐级 findFile
+            if ('/' !in fileName) {
+                attachmentListing(treeUri)?.let { return@runCatching it[fileName] }
             }
-            current?.uri?.toString()
+            resolveByTraversal(treeUri, normalized)
         }.getOrElse {
             Timber.w(it, "AttachmentRepository: resolve failed path=%s", relativePath)
             null
@@ -318,6 +330,36 @@ class AttachmentRepositoryImpl @Inject constructor(
         }
         resolveUriCache[cacheKey] = resolved.orEmpty()
         return resolved
+    }
+
+    /**
+     * 列出库根目录下 attachments 的 文件名 -> uri 清单并缓存；
+     * 返回 null 表示列举失败（调用方应回退逐级查找），空 map 表示没有附件目录
+     */
+    private fun attachmentListing(treeUri: Uri): Map<String, String>? {
+        val key = treeUri.toString()
+        attachmentListingCache[key]?.let { return it }
+
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
+        val directory = root.findFile(ATTACHMENTS_DIRECTORY) ?: return emptyMap<String, String>().also {
+            attachmentListingCache[key] = it
+        }
+        if (!directory.isDirectory) return null
+
+        val listing = directory.listFiles()
+            .filter { it.isFile }
+            .mapNotNull { file -> file.name?.let { name -> name to file.uri.toString() } }
+            .toMap()
+        attachmentListingCache[key] = listing
+        return listing
+    }
+
+    private fun resolveByTraversal(treeUri: Uri, normalizedPath: String): String? {
+        var current = DocumentFile.fromTreeUri(context, treeUri)
+        for (segment in normalizedPath.split('/')) {
+            current = current?.findFile(segment)
+        }
+        return current?.uri?.toString()
     }
 
     private fun queryDisplayName(sourceUri: Uri): String? {
