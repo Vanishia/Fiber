@@ -133,6 +133,15 @@ class MainActivity : ComponentActivity() {
                     Timber.d("清理了 $removedCount 个无效的库")
                 }
 
+                // 数据库升级后摘要被清空、待重建索引达阈值时，一次性迁移所有库
+                // （主界面显示全库聚合进度，期间切换库也保持进度页），
+                // 迁移完成即全库索引已最新，跳过常规启动同步，避免逐库迁移的闪烁
+                val migrated = librarySyncManager.reindexAllLibrariesIfNeeded(contentResolver)
+                if (migrated) {
+                    Timber.d("StartupTrace: db migration reindex done, skip regular startup sync")
+                    return@launch
+                }
+
                 delay(ACTIVE_LIBRARY_SYNC_DELAY_MS)
                 Timber.d("StartupTrace: active library sync enqueue")
                 librarySyncManager.syncActiveLibraryIfIdle(contentResolver)

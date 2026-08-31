@@ -120,4 +120,46 @@ class LibrarySyncManagerTest {
         verify(exactly = 0) { eventBus.tryEmit(ofType<AppEvent.SyncProgress>()) }
         coVerify(exactly = 0) { eventBus.emit(ofType<AppEvent.SyncCompleted>()) }
     }
+
+    @Test
+    fun reindexAllLibraries_belowThreshold_doesNothing() = runTest {
+        coEvery { fileIndexer.countPendingReindex() } returns 3
+
+        val migrated = manager.reindexAllLibrariesIfNeeded(contentResolver)
+
+        org.junit.Assert.assertFalse(migrated)
+        coVerify(exactly = 0) { fileIndexer.syncLibrary(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { eventBus.tryEmit(ofType<AppEvent.SyncStarted>()) }
+        coVerify(exactly = 0) { eventBus.emit(ofType<AppEvent.SyncCompleted>()) }
+    }
+
+    @Test
+    fun reindexAllLibraries_aboveThreshold_migratesAllWithAggregatedProgress() = runTest {
+        val libA = activeLibrary()
+        val libB = libA.copy(id = "library-2", name = "库B", folderUri = "content://folder2", isActive = false)
+        coEvery { fileIndexer.countPendingReindex() } returns 50
+        every { libraryRepository.getAllLibraries() } returns flowOf(listOf(libA, libB))
+        every { libraryRepository.getActiveLibrary() } returns flowOf(libA)
+        coEvery { fileIndexer.syncLibrary(any(), "library-1", any(), any(), any()) } answers {
+            arg<((Int, Int) -> Unit)>(4).invoke(0, 30)
+            arg<((Int, Int) -> Unit)>(4).invoke(30, 30)
+            SyncResult.Success(inserted = 0, updated = 30, deleted = 0)
+        }
+        coEvery { fileIndexer.syncLibrary(any(), "library-2", any(), any(), any()) } answers {
+            arg<((Int, Int) -> Unit)>(4).invoke(0, 20)
+            arg<((Int, Int) -> Unit)>(4).invoke(20, 20)
+            SyncResult.Success(inserted = 0, updated = 20, deleted = 0)
+        }
+        every { eventBus.tryEmit(any()) } returns true
+
+        val migrated = manager.reindexAllLibrariesIfNeeded(contentResolver)
+
+        org.junit.Assert.assertTrue(migrated)
+        // 全程只有一对 Started/Completed，迁移期间切换库不会打断进度页
+        coVerify(exactly = 1) { eventBus.emit(AppEvent.SyncStarted("library-1", isReindex = true)) }
+        coVerify(exactly = 1) { eventBus.emit(AppEvent.SyncCompleted("library-1")) }
+        // 进度跨库聚合：第二库完成时累计为 50/50
+        verify { eventBus.tryEmit(AppEvent.SyncProgress("library-2", 50, 50)) }
+        coVerify { eventBus.emit(AppEvent.RefreshFileList) }
+    }
 }

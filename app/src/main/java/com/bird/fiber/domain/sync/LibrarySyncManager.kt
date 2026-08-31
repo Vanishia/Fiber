@@ -213,6 +213,91 @@ class LibrarySyncManager @Inject constructor(
         }
     }
 
+    /**
+     * 数据库升级后的一次性全库迁移
+     *
+     * 迁移会清空所有库的摘要触发全量重建；若沿用逐库按需同步，界面会在
+     * 进度页与列表间来回闪烁（一个库迁完、切到另一个库才开始迁）。这里在
+     * 进入应用时检测待重建数量，达到阈值就一次性迁移所有库：全程只发一对
+     * SyncStarted/SyncCompleted，进度按全库聚合，期间切换库主界面保持进度页
+     *
+     * @return true 表示执行了迁移，调用方应跳过常规启动同步
+     */
+    suspend fun reindexAllLibrariesIfNeeded(contentResolver: ContentResolver): Boolean {
+        val pending = fileIndexer.countPendingReindex()
+        if (pending < REINDEX_PROGRESS_MIN_TOTAL) {
+            return false
+        }
+        if (!isSyncingAllLibraries.compareAndSet(false, true)) {
+            Timber.d("LibrarySyncManager: skip reindex-all because another task is running")
+            return false
+        }
+
+        try {
+            val libraries = libraryRepository.getAllLibraries().first()
+            if (libraries.isEmpty()) return false
+            val activeLibraryId = libraryRepository.getActiveLibrary().first()?.id
+            Timber.d(
+                "LibrarySyncManager: reindex all libraries begin count=%s pending=%s",
+                libraries.size, pending
+            )
+
+            val progressLibraryId = activeLibraryId ?: libraries.first().id
+            eventBus.emit(AppEvent.SyncStarted(progressLibraryId, isReindex = true))
+
+            // 全库聚合进度：总数随各库扫描完成逐步累加，已完成部分跨库累计
+            var completedInPreviousLibraries = 0
+            var aggregatedTotal = 0
+            var currentLibraryTotal = 0
+
+            libraries.forEach { library ->
+                when (val result = fileIndexer.syncLibrary(
+                    contentResolver = contentResolver,
+                    libraryId = library.id,
+                    folderUri = library.folderUri,
+                    reason = "db-migration",
+                    onProgress = { current, total ->
+                        if (total != currentLibraryTotal) {
+                            aggregatedTotal += total - currentLibraryTotal
+                            currentLibraryTotal = total
+                        }
+                        // 节流规则与逐库同步一致（首尾必发、其余每 5 个一次）
+                        val shouldReport = current == 0 || current == total ||
+                            current % REINDEX_PROGRESS_EVERY == 0
+                        if (shouldReport) {
+                            eventBus.tryEmit(
+                                AppEvent.SyncProgress(
+                                    libraryId = library.id,
+                                    processed = completedInPreviousLibraries + current,
+                                    total = aggregatedTotal
+                                )
+                            )
+                        }
+                    }
+                )) {
+                    is SyncResult.Success -> {
+                        Timber.d(
+                            "LibrarySyncManager: migration sync done name=%s inserted=%s updated=%s deleted=%s",
+                            library.name, result.inserted, result.updated, result.deleted
+                        )
+                    }
+                    is SyncResult.Failure -> {
+                        logSyncFailure("LibrarySyncManager: migration sync failed name=${library.name}", result.error)
+                    }
+                }
+                completedInPreviousLibraries += currentLibraryTotal
+                currentLibraryTotal = 0
+            }
+
+            eventBus.emit(AppEvent.SyncCompleted(progressLibraryId))
+            eventBus.emit(AppEvent.RefreshFileList)
+            Timber.d("LibrarySyncManager: reindex all libraries done")
+            return true
+        } finally {
+            isSyncingAllLibraries.set(false)
+        }
+    }
+
     private suspend fun syncLibraries(
         contentResolver: ContentResolver,
         libraries: List<LibraryEntity>,

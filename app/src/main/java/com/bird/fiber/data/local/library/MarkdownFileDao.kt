@@ -185,6 +185,14 @@ interface MarkdownFileDao {
     suspend fun getFileCount(libraryId: String): Int
 
     /**
+     * 统计所有库中缺少摘要（content_preview 为空）的笔记数
+     *
+     * 数据库迁移会清空摘要触发重建索引，启动时据此判断是否需要全库迁移
+     */
+    @Query("SELECT COUNT(*) FROM markdown_files WHERE content_preview = '' AND is_deleted = 0")
+    suspend fun countMissingPreview(): Int
+
+    /**
      * 根据 URI 获取文件
      */
     @Query("SELECT * FROM markdown_files WHERE uri = :uri")

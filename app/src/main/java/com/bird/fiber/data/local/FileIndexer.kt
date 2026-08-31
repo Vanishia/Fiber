@@ -37,6 +37,15 @@ class FileIndexer internal constructor(
 
     private val mutex = Mutex()
 
+    /**
+     * 统计待重建索引（摘要为空）的笔记数
+     *
+     * 数据库升级迁移会清空全库摘要，启动时据此判断是否需要一次性全库迁移
+     */
+    suspend fun countPendingReindex(): Int = withContext(Dispatchers.IO) {
+        markdownFileDao.countMissingPreview()
+    }
+
     suspend fun syncLibrary(
         contentResolver: ContentResolver,
         libraryId: String,
