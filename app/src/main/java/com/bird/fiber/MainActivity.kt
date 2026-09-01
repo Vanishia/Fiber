@@ -3,6 +3,7 @@ package com.bird.fiber
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.bird.fiber.data.settings.SettingsDataStore
+import com.bird.fiber.data.importing.ImportShareManager
+import com.bird.fiber.data.importing.PendingImport
 import com.bird.fiber.domain.sync.LibrarySyncManager
 import com.bird.fiber.ui.navigation.FiberNavGraph
 import com.bird.fiber.ui.screens.settings.DarkMode
@@ -23,8 +26,10 @@ import com.bird.fiber.ui.screens.settings.SettingsUiState
 import com.bird.fiber.ui.theme.FiberTheme
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -45,6 +50,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
+
+    @Inject
+    lateinit var importShareManager: ImportShareManager
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -117,7 +125,84 @@ class MainActivity : ComponentActivity() {
         }
 
         schedulePostFirstDrawStartupWork()
+        handleIncomingIntent(intent)
     }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    /**
+     * 处理其他应用打开/分享过来的 .md 文件
+     *
+     * intent 自带临时读权限，立即读取内容暂存到 [ImportShareManager]，
+     * 由 UI 层的选库对话框决定保存到哪个库。处理后清空 intent 的 data，
+     * 防止配置变更（如旋转屏幕）重建 Activity 时重复弹窗
+     */
+    private fun handleIncomingIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        val sharedUri = when (intent.action) {
+            android.content.Intent.ACTION_VIEW -> intent.data
+            android.content.Intent.ACTION_SEND -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(
+                        android.content.Intent.EXTRA_STREAM,
+                        Uri::class.java
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM)
+                }
+            }
+            else -> null
+        } ?: return
+
+        Timber.d("收到外部文件: $sharedUri")
+        // 标记已处理，重建时不再重复导入
+        intent.data = null
+        intent.removeExtra(android.content.Intent.EXTRA_STREAM)
+
+        lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) { readSharedFile(sharedUri) }
+            if (pending != null) {
+                importShareManager.offer(pending)
+            } else {
+                Timber.w("外部文件读取失败: $sharedUri")
+            }
+        }
+    }
+
+    /**
+     * 读取外部文件内容，超过 [MAX_IMPORT_CHARS] 字符截断
+     */
+    private fun readSharedFile(uri: Uri): PendingImport? = runCatching {
+        val displayName = queryDisplayName(uri) ?: "导入笔记.md"
+        val content = contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+            val buffer = CharArray(MAX_IMPORT_CHARS)
+            val read = reader.read(buffer)
+            if (read > 0) String(buffer, 0, read) else ""
+        } ?: return null
+        PendingImport(fileName = displayName, content = content)
+    }.onFailure { e ->
+        Timber.e(e, "读取外部文件失败: $uri")
+    }.getOrNull()
+
+    private fun queryDisplayName(uri: Uri): String? = runCatching {
+        contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
 
     override fun onResume() {
         super.onResume()
@@ -158,5 +243,8 @@ class MainActivity : ComponentActivity() {
     private companion object {
         private const val ACTIVE_LIBRARY_SYNC_DELAY_MS = 750L
         private const val INACTIVE_LIBRARIES_SYNC_DELAY_MS = 2_000L
+
+        /** 导入文件最大读取字符数（约 512KB 文本），超出截断 */
+        private const val MAX_IMPORT_CHARS = 512 * 1024
     }
 }
