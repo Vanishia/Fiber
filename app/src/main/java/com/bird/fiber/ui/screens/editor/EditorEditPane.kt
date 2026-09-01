@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,7 +39,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -67,9 +67,13 @@ internal fun EditorEditPane(
     // 光标只在聚焦时显示，光标校正也仅限聚焦后；
     // 否则刚进入编辑模式（选区默认在文末）会被误校正滚到最后一行
     var fieldFocused by remember { mutableStateOf(false) }
-    // 校正函数在 LaunchedEffect 里异步执行，必须读最新值而非启动时的旧闭包，
-    // 否则点按后的选区更新还没传播进来，会按旧选区（文末）滚动
+    // 校正函数在 LaunchedEffect 里异步执行，必须读最新值而非启动时的旧闭包
     val currentValue by rememberUpdatedState(value)
+    // 点按产生的新选区要等 ViewModel 回传才反映到 value，至少晚一帧；
+    // 本地同步记录选区供校正使用，否则首次聚焦时会按旧选区（初始在文末）把视图滚到末尾
+    var localSelection by remember { mutableStateOf(value.selection) }
+    // 区分校正产生的滚动和用户手动滚动，后者出现时聚焦校正循环立即退出
+    var programmaticScroll by remember { mutableStateOf(false) }
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -82,7 +86,7 @@ internal fun EditorEditPane(
         val layout = textLayoutResult ?: return
         val viewportHeight = scrollState.viewportSize
         if (viewportHeight <= 0) return
-        val caret = currentValue.selection.start.coerceIn(0, currentValue.text.length)
+        val caret = localSelection.start.coerceIn(0, currentValue.text.length)
         val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
@@ -93,30 +97,60 @@ internal fun EditorEditPane(
         }
         val coerced = target.roundToInt().coerceIn(0, scrollState.maxValue)
         if (coerced != scrollState.value) {
-            scope.launch { scrollState.scrollTo(coerced) }
+            scope.launch {
+                programmaticScroll = true
+                try {
+                    scrollState.scrollTo(coerced)
+                } finally {
+                    programmaticScroll = false
+                }
+            }
         }
     }
 
+    // 与 ViewModel 回传的选区保持同步（点按时已在 onValueChange 里先行更新，这里不会覆盖新值）
+    LaunchedEffect(value.selection) { localSelection = value.selection }
+
     // 键盘弹起/收起改变可视高度时，BasicTextField 自带的跟随光标只在输入时触发，
-    // 系统侧还会尝试把焦点区域滚进屏幕，长文下会错误地滚到最后一行；
-    // 动画期间逐帧校正，并在动画结束后再延迟补一次，确保最终停在光标处
-    val imeBottomPx = WindowInsets.ime.getBottom(density)
-    LaunchedEffect(scrollState.viewportSize, value.selection) {
-        revealCursorIfNeeded()
-        delay(300)
+    // 需要手动把光标滚回可视区；动画期间 imeBottomPx 逐帧变化，跟随逐帧校正即可。
+    // 不要在动画结束后再延迟补正：补正会以略有出入的目标再滚一次，
+    // 表现为"光标出现后屏幕又滚动一截"
+    val imeInsets = WindowInsets.ime
+    val imeBottomPx = imeInsets.getBottom(density)
+    LaunchedEffect(scrollState.viewportSize) {
         revealCursorIfNeeded()
     }
     LaunchedEffect(imeBottomPx) {
         revealCursorIfNeeded()
     }
 
-    // 聚焦瞬间系统会按旧选区（首次进入时是文末）尝试把光标滚进屏幕，
-    // 与点按产生的新选区存在竞争；聚焦后的短暂窗口内持续按当前光标校正
+    // 聚焦瞬间系统会按聚焦时的旧选区（首次进入时是文末）尝试把光标滚进屏幕，
+    // 与点按产生的新选区存在竞争；聚焦后先略过点按落键窗口（此时选区还是旧值），
+    // 再逐帧校正直到滚动与键盘动画都稳定，避免固定次数校正跑完后系统动画还在滚动。
+    // 用户手动滚动时立即退出，不与手动滚动打架
     LaunchedEffect(fieldFocused) {
         if (!fieldFocused) return@LaunchedEffect
-        repeat(12) {
-            revealCursorIfNeeded()
-            delay(50)
+        val startNanos = withFrameNanos { it }
+        var stableFrames = 0
+        var lastScrollValue = scrollState.value
+        var lastImeBottom = imeInsets.getBottom(density)
+        while (stableFrames < 8) {
+            val elapsed = withFrameNanos { it } - startNanos
+            if (elapsed > TAP_SETTLE_NANOS &&
+                scrollState.isScrollInProgress && !programmaticScroll
+            ) {
+                break
+            }
+            if (elapsed > TAP_SETTLE_NANOS) {
+                revealCursorIfNeeded()
+            }
+            withFrameNanos { }
+            val scrollValue = scrollState.value
+            val imeBottom = imeInsets.getBottom(density)
+            stableFrames = if (scrollValue != lastScrollValue || imeBottom != lastImeBottom) 0 else stableFrames + 1
+            lastScrollValue = scrollValue
+            lastImeBottom = imeBottom
+            if (withFrameNanos { it } - startNanos > FOCUS_CORRECT_TIMEOUT_NANOS) break
         }
     }
 
@@ -144,6 +178,8 @@ internal fun EditorEditPane(
         BasicTextField(
             value = value,
             onValueChange = { newValue ->
+                // 选区先行本地同步，光标校正不等 ViewModel 回传
+                localSelection = newValue.selection
                 onContentChange(newValue)
                 associationTriggerIndex = findAssociationTrigger(newValue)
                 associationMenuExpanded = associationTriggerIndex != null
@@ -201,3 +237,9 @@ internal fun EditorEditPane(
         }
     }
 }
+
+/** 聚焦后跳过校正的点按落键窗口：此时新选区尚未产生，按旧选区校正会误滚 */
+private const val TAP_SETTLE_NANOS = 200_000_000L
+
+/** 聚焦校正循环的最长持续时间，需覆盖键盘动画与系统侧焦点滚动 */
+private const val FOCUS_CORRECT_TIMEOUT_NANOS = 1_500_000_000L
