@@ -7,14 +7,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 待导入的外部 Markdown 文件
+ * 待导入的外部文件
  *
- * @param fileName 文件名（含 .md 后缀，保存时由 FileRepository 保证后缀）
- * @param content 文件文本内容
+ * @param fileName 文件名（含后缀；图片导入时为图片名，仅用于对话框展示）
+ * @param content Markdown 文本内容；图片导入时为空
+ * @param imagePath 图片导入时，收到后立即拷入应用缓存的临时文件路径（防临时读权限失效）；
+ *                  非图片导入为 null。消费或放弃后需删除该临时文件
  */
 data class PendingImport(
     val fileName: String,
-    val content: String
+    val content: String,
+    val imagePath: String? = null
 )
 
 /**

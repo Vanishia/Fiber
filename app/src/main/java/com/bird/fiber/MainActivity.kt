@@ -162,14 +162,16 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 处理其他应用打开/分享过来的 .md 文件
+     * 处理其他应用打开/分享过来的文件
      *
      * intent 自带临时读权限，立即读取内容暂存到 [ImportShareManager]，
      * 由 UI 层的选库对话框决定保存到哪个库。处理后清空 intent 的 data，
-     * 防止配置变更（如旋转屏幕）重建 Activity 时重复弹窗
+     * 防止配置变更（如旋转屏幕）重建 Activity 时重复弹窗。
+     * 图片分享会先把图片拷入应用缓存，防止选库期间临时读权限失效
      */
     private fun handleIncomingIntent(intent: android.content.Intent?) {
         if (intent == null) return
+        val isImageShare = intent.type?.startsWith("image/") == true
         val sharedUri = when (intent.action) {
             android.content.Intent.ACTION_VIEW -> intent.data
             android.content.Intent.ACTION_SEND -> {
@@ -186,13 +188,15 @@ class MainActivity : ComponentActivity() {
             else -> null
         } ?: return
 
-        Timber.d("收到外部文件: $sharedUri")
+        Timber.d("收到外部文件: $sharedUri (image=$isImageShare)")
         // 标记已处理，重建时不再重复导入
         intent.data = null
         intent.removeExtra(android.content.Intent.EXTRA_STREAM)
 
         lifecycleScope.launch {
-            val pending = withContext(Dispatchers.IO) { readSharedFile(sharedUri) }
+            val pending = withContext(Dispatchers.IO) {
+                if (isImageShare) readSharedImage(sharedUri) else readSharedFile(sharedUri)
+            }
             if (pending != null) {
                 importShareManager.offer(pending)
             } else {
@@ -214,6 +218,33 @@ class MainActivity : ComponentActivity() {
         PendingImport(fileName = displayName, content = content)
     }.onFailure { e ->
         Timber.e(e, "读取外部文件失败: $uri")
+    }.getOrNull()
+
+    /**
+     * 把分享进来的图片拷入应用缓存目录
+     *
+     * 临时读权限只在分享方任务存活期间有效，先落盘最稳妥；
+     * 保存或取消后由 ImportViewModel 删除缓存文件
+     */
+    private fun readSharedImage(uri: Uri): PendingImport? = runCatching {
+        val displayName = queryDisplayName(uri)
+        val extension = displayName
+            ?.substringAfterLast('.', "")
+            ?.lowercase()
+            ?.takeIf { it.matches(Regex("[a-z0-9]{1,8}")) }
+            ?: "jpg"
+        val dir = java.io.File(cacheDir, "incoming").apply { mkdirs() }
+        val file = java.io.File(dir, "share_${System.currentTimeMillis()}.$extension")
+        contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use { output -> input.copyTo(output) }
+        } ?: return null
+        PendingImport(
+            fileName = displayName ?: file.name,
+            content = "",
+            imagePath = file.absolutePath
+        )
+    }.onFailure { e ->
+        Timber.e(e, "缓存分享图片失败: $uri")
     }.getOrNull()
 
     private fun queryDisplayName(uri: Uri): String? = runCatching {
