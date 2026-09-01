@@ -43,9 +43,13 @@ class ImportViewModel @Inject constructor(
     val libraries: StateFlow<List<LibraryEntity>> = libraryRepository.getAllLibraries()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** 保存结果提示（成功/失败文案） */
+    /** 保存失败提示 */
     private val _saveResult = MutableSharedFlow<String>()
     val saveResult: SharedFlow<String> = _saveResult.asSharedFlow()
+
+    /** 保存成功事件：携带新文件 uri，由界面导航进编辑器继续编辑/改名 */
+    private val _openEditor = MutableSharedFlow<String>()
+    val openEditor: SharedFlow<String> = _openEditor.asSharedFlow()
 
     /**
      * 保存待导入内容到指定库
@@ -79,7 +83,7 @@ class ImportViewModel @Inject constructor(
         )) {
             is FileResult.Success -> {
                 Timber.d("导入成功: ${result.data.uri} -> ${library.name}")
-                _saveResult.emit("已保存到「${library.name}」")
+                _openEditor.emit(result.data.uri)
             }
             is FileResult.Error -> {
                 Timber.e("导入失败: ${result.error}")
@@ -111,7 +115,7 @@ class ImportViewModel @Inject constructor(
         when (noteResult) {
             is FileResult.Success -> {
                 Timber.d("图片笔记导入成功: ${noteResult.data.uri} -> ${library.name}")
-                _saveResult.emit("已保存到「${library.name}」")
+                _openEditor.emit(noteResult.data.uri)
             }
             is FileResult.Error -> {
                 Timber.e("图片笔记创建失败: ${noteResult.error}")

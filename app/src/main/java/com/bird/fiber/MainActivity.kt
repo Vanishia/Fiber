@@ -26,6 +26,7 @@ import com.bird.fiber.data.importing.ImportShareManager
 import com.bird.fiber.data.importing.PendingImport
 import com.bird.fiber.domain.sync.LibrarySyncManager
 import com.bird.fiber.ui.navigation.FiberNavGraph
+import com.bird.fiber.ui.navigation.FiberRoute
 import com.bird.fiber.ui.screens.importing.ImportLibraryDialog
 import com.bird.fiber.ui.screens.importing.ImportViewModel
 import com.bird.fiber.ui.screens.settings.DarkMode
@@ -138,6 +139,15 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     importViewModel.saveResult.collect { message ->
                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                // 导入保存成功后直接进入编辑器（编辑模式），方便补文本、改名
+                LaunchedEffect(Unit) {
+                    importViewModel.openEditor.collect { fileUri ->
+                        navController.navigate(FiberRoute.editor(fileUri, editMode = true)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
