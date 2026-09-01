@@ -128,6 +128,8 @@ fun EditorScreen(
             newName = renameName,
             onNewNameChange = { renameName = it },
             onDismiss = { showRenameDialog = false },
+            selectAllOnOpen = true,
+            confirmOnDismiss = true,
             onConfirm = {
                 val newName = renameName.trim()
                 showRenameDialog = false
