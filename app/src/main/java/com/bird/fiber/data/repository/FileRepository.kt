@@ -61,8 +61,9 @@ interface FileRepository {
      * 重命名文件
      * @param fileUri 文件URI
      * @param newName 新文件名（不需要包含.md扩展名）
+     * @return 重命名后的新文件 URI（SAF renameDocument 会生成新 URI）
      */
-    suspend fun renameFile(fileUri: String, newName: String): FileResult<Unit>
+    suspend fun renameFile(fileUri: String, newName: String): FileResult<String>
 
     /**
      * 检查是否已选择文件夹

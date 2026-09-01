@@ -78,6 +78,7 @@ fun FileListContent(
     onDeleteRequest: (String, String) -> Unit = { _, _ -> },
     onEditRequest: (String) -> Unit = {},
     onCopyRequest: (String, String) -> Unit = { _, _ -> },
+    onShareRequest: (String, String) -> Unit = { _, _ -> },
     onRenameRequest: (String, String) -> Unit = { _, _ -> },
     onMenuClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
@@ -89,7 +90,8 @@ fun FileListContent(
     modifier: Modifier = Modifier
 ) {
     var showLongPressMenu by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
+    // 菜单条目较多，跳过半展开态直接完整展开，避免底部按钮被遮挡
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
     val density = LocalDensity.current
     val statusBarTopPadding = with(density) {
@@ -181,6 +183,9 @@ fun FileListContent(
         },
         onCopy = {
             selectedFile?.let { onCopyRequest(it.name.removeSuffix(".md"), it.uri) }
+        },
+        onShare = {
+            selectedFile?.let { onShareRequest(it.name.removeSuffix(".md"), it.uri) }
         },
         onRename = {
             selectedFile?.let { onRenameRequest(it.name.removeSuffix(".md"), it.uri) }

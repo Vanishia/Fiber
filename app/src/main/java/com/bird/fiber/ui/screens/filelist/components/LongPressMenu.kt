@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,13 +41,14 @@ import timber.log.Timber
  * 长按菜单 Bottom Sheet
  *
  * 从底部弹出，符合手指热区操作习惯
- * 包含：复制内容、重命名、编辑、删除、取消 五个选项
+ * 包含：复制内容、分享、重命名、编辑、删除、取消 六个选项
  *
  * @param isVisible 是否显示菜单
  * @param onDismiss 关闭菜单回调
  * @param onEdit 编辑回调
  * @param onDelete 删除回调
  * @param onCopy 复制回调
+ * @param onShare 分享回调
  * @param onRename 重命名回调
  * @param sheetState BottomSheet状态
  */
@@ -58,6 +60,7 @@ fun LongPressMenuBottomSheet(
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
     onCopy: () -> Unit = {},
+    onShare: () -> Unit = {},
     onRename: () -> Unit = {},
     sheetState: SheetState = rememberModalBottomSheetState()
 ) {
@@ -75,6 +78,7 @@ fun LongPressMenuBottomSheet(
             onEdit = onEdit,
             onDelete = onDelete,
             onCopy = onCopy,
+            onShare = onShare,
             onRename = onRename,
             modifier = Modifier.fillMaxWidth()
         )
@@ -112,6 +116,7 @@ private fun LongPressMenuContent(
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
     onCopy: () -> Unit = {},
+    onShare: () -> Unit = {},
     onRename: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -119,7 +124,7 @@ private fun LongPressMenuContent(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // 菜单标题
         Text(
@@ -127,10 +132,8 @@ private fun LongPressMenuContent(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
         )
-
-        Spacer(modifier = Modifier.height(4.dp))
 
         // 复制内容按钮 - 卡片样式
         ActionButton(
@@ -142,6 +145,19 @@ private fun LongPressMenuContent(
                 Timber.d("菜单点击：复制内容")
                 onDismiss()
                 onCopy()
+            }
+        )
+
+        // 分享按钮 - 卡片样式
+        ActionButton(
+            icon = Icons.Default.Share,
+            text = "分享",
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = {
+                Timber.d("菜单点击：分享")
+                onDismiss()
+                onShare()
             }
         )
 
@@ -184,7 +200,7 @@ private fun LongPressMenuContent(
             }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 取消按钮 - 单独一行
         ActionButton(
@@ -222,7 +238,7 @@ private fun ActionButton(
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {

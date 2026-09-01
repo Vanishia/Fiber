@@ -1,5 +1,6 @@
 package com.bird.fiber.ui.screens.editor
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,7 +36,8 @@ internal fun EditorTopBar(
     onBackClick: () -> Unit,
     onTogglePreviewMode: () -> Unit,
     onSaveClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTitleClick: () -> Unit = {}
 ) {
     val actionsEnabled = !isLoading && !isSaving
 
@@ -80,7 +82,10 @@ internal fun EditorTopBar(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            // 点击标题重命名文件
+                            .clickable(enabled = actionsEnabled) { onTitleClick() }
                     )
 
                     IconButton(

@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +46,8 @@ fun EditorScreen(
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var pendingClose by remember { mutableStateOf(false) }
     var wasSaving by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameName by remember { mutableStateOf("") }
 
     LaunchedEffect(uiState.isSaving) {
         if (wasSaving && !uiState.isSaving) {
@@ -110,9 +113,35 @@ fun EditorScreen(
                 onSaveClick = viewModel::saveFile,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .offset(y = statusBarTopPadding)
+                    .offset(y = statusBarTopPadding),
+                onTitleClick = {
+                    renameName = uiState.fileName
+                    showRenameDialog = true
+                }
             )
         }
+    }
+
+    if (showRenameDialog) {
+        RenameFileDialog(
+            currentName = uiState.fileName,
+            newName = renameName,
+            onNewNameChange = { renameName = it },
+            onDismiss = { showRenameDialog = false },
+            onConfirm = {
+                val newName = renameName.trim()
+                showRenameDialog = false
+                if (newName.isNotBlank() && newName != uiState.fileName) {
+                    viewModel.renameFile(newName) { success ->
+                        Toast.makeText(
+                            context,
+                            if (success) "已重命名为「$newName」" else "重命名失败，可能存在同名文件",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        )
     }
 
     if (showUnsavedDialog) {

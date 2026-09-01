@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.compose.ui.platform.LocalContext
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.ui.screens.filelist.components.CreateFileDialog
 import com.bird.fiber.ui.screens.filelist.components.DeleteConfirmDialog
@@ -42,6 +43,7 @@ import com.bird.fiber.ui.screens.filelist.components.FileListSkeleton
 import com.bird.fiber.ui.screens.filelist.components.NoFolderSelected
 import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.utils.ShareHelper
 import timber.log.Timber
 
 /**
@@ -103,6 +105,7 @@ fun FileListScreen(
     // Snackbar 状态
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // 监听文件创建成功事件，自动进入编辑器
     LaunchedEffect(Unit) {
@@ -218,6 +221,9 @@ fun FileListScreen(
                     onRenameRequest = { fileName, fileUri ->
                         fileToRename = fileName to fileUri
                         renameFileName = fileName
+                    },
+                    onShareRequest = { fileName, fileUri ->
+                        ShareHelper.shareMarkdownFile(context, fileUri, fileName)
                     },
                     onMenuClick = onMenuClick,
                     onSearchClick = onSearchClick,

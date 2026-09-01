@@ -154,7 +154,7 @@ class FileRepositoryImpl @Inject constructor(
         FileResult.Success(Unit)
     }
 
-    override suspend fun renameFile(fileUri: String, newName: String): FileResult<Unit> = ioFileResult(
+    override suspend fun renameFile(fileUri: String, newName: String): FileResult<String> = ioFileResult(
         target = fileUri,
         action = "rename"
     ) {
@@ -181,7 +181,7 @@ class FileRepositoryImpl @Inject constructor(
             )
         }
 
-        FileResult.Success(Unit)
+        FileResult.Success(renamedUri.toString())
     }
 
     override suspend fun hasSelectedFolder(): Boolean {

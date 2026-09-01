@@ -193,6 +193,29 @@ class EditorViewModel : ViewModel {
     }
 
     /**
+     * 重命名当前文件。
+     * SAF 重命名会生成新 URI，成功后必须同步更新 currentFileUri，
+     * 否则后续保存会写到已失效的旧 URI
+     */
+    fun renameFile(newName: String, onComplete: (Boolean) -> Unit) {
+        val uri = currentFileUri ?: return
+        viewModelScope.launch {
+            fileRepository.renameFile(uri, newName)
+                .onSuccess { newUri ->
+                    currentFileUri = newUri
+                    _uiState.value = _uiState.value.copy(fileName = UriHelper.extractFileName(newUri))
+                    // 通知文件列表刷新名称
+                    eventBus.emit(AppEvent.FileUpdated(newUri))
+                    onComplete(true)
+                }
+                .onError { error ->
+                    Timber.e("EditorViewModel: 重命名失败 uri=$uri, error=$error")
+                    onComplete(false)
+                }
+        }
+    }
+
+    /**
      * 切换预览模式
      */
     fun togglePreviewMode() {

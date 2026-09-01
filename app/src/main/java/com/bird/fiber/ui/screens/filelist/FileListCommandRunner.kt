@@ -17,7 +17,7 @@ class FileListCommandRunner @Inject constructor(
         return repository.deleteFile(fileUri)
     }
 
-    suspend fun renameFile(fileUri: String, newName: String): FileResult<Unit> {
+    suspend fun renameFile(fileUri: String, newName: String): FileResult<String> {
         return repository.renameFile(fileUri, newName)
     }
 
