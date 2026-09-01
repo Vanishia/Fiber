@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -76,6 +77,11 @@ internal fun EditorEditPane(
     var localSelection by remember { mutableStateOf(value.selection) }
     // 区分校正产生的滚动和用户手动滚动，后者出现时聚焦校正循环立即退出
     var programmaticScroll by remember { mutableStateOf(false) }
+    // 聚焦时的滚动锚点：点按发生的视图位置。聚焦稳定期内若被系统 stale 滚动带偏，
+    // 优先恢复到这里，让用户点按的文字在屏幕上纹丝不动
+    var anchorScroll by remember { mutableStateOf<Int?>(null) }
+    // 是否处于聚焦后的稳定期（校正循环存活期间），稳定期外不使用锚点
+    var focusSettling by remember { mutableStateOf(false) }
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -92,10 +98,23 @@ internal fun EditorEditPane(
         val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
-        val target = when {
-            rect.top < visibleTop -> rect.top - cursorRevealMarginPx
-            rect.bottom > visibleBottom -> rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
-            else -> return
+        if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return
+        // 聚焦稳定期内可能被系统 stale 滚动带偏：优先回到锚点（点按时用户看到的位置）；
+        // 锚点处光标会被键盘遮住时，从锚点出发做最小滚动（而不是从被带偏的位置算，
+        // 否则会把光标贴到视口顶边，视觉上整页上移一个键盘高度）
+        val anchor = anchorScroll
+        val target = if (focusSettling && anchor != null) {
+            val anchorTop = anchor.coerceIn(0, scrollState.maxValue).toFloat()
+            val anchorBottom = anchorTop + viewportHeight.toFloat()
+            when {
+                rect.top >= anchorTop && rect.bottom <= anchorBottom -> anchorTop
+                rect.bottom > anchorBottom -> rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
+                else -> rect.top - cursorRevealMarginPx
+            }
+        } else if (rect.top < visibleTop) {
+            rect.top - cursorRevealMarginPx
+        } else {
+            rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
         }
         val coerced = target.roundToInt().coerceIn(0, scrollState.maxValue)
         if (coerced != scrollState.value) {
@@ -154,15 +173,28 @@ internal fun EditorEditPane(
             lastScrollValue = scrollValue
             lastImeBottom = imeBottom
         }
+        focusSettling = false
     }
 
-    // 从预览切换到编辑时停留在相近位置：按滚动比例恢复（仅在进入时执行一次）
+    // 从预览切换到编辑时停留在相近位置：按滚动比例恢复（仅在进入时执行一次）。
+    // 恢复后把仍是加载默认值（文末）的选区归位到可视区域中部：系统聚焦时会按
+    // 选区发起 bringIntoView 动画，选区在文末会把整个视图拉向文末再被校正拉回
+    // （视觉上"滚一下又被拽回来"）；归位后系统动画失去目标，用户点按会立即
+    // 覆盖这个选区，不影响编辑
     LaunchedEffect(Unit) {
-        val fraction = initialScrollFraction ?: return@LaunchedEffect
-        if (fraction <= 0f) return@LaunchedEffect
         // 等内容量出真实可滚动范围再换算目标位置
         snapshotFlow { scrollState.maxValue }.first { it > 0 }
-        scrollState.scrollTo((fraction * scrollState.maxValue).roundToInt())
+        val fraction = initialScrollFraction ?: 0f
+        if (fraction > 0f) {
+            scrollState.scrollTo((fraction * scrollState.maxValue).roundToInt())
+        }
+        val layout = snapshotFlow { textLayoutResult }.first { it != null } ?: return@LaunchedEffect
+        if (fieldFocused) return@LaunchedEffect  // 用户已点按，不动选区
+        val text = currentValue.text
+        if (text.isEmpty() || currentValue.selection.end != text.length) return@LaunchedEffect
+        val centerY = (scrollState.value + scrollState.viewportSize / 2f - topInsetPx).coerceAtLeast(0f)
+        val offset = layout.getOffsetForPosition(Offset(0f, centerY))
+        onContentChange(TextFieldValue(text, TextRange(offset)))
     }
 
     // 上报滚动比例，供切回预览时恢复位置
@@ -188,7 +220,16 @@ internal fun EditorEditPane(
             },
             modifier = Modifier
                 .fillMaxSize()
-                .onFocusChanged { fieldFocused = it.hasFocus }
+                .onFocusChanged {
+                    if (it.hasFocus && !fieldFocused) {
+                        // 记录锚点：此刻的视图位置就是用户点按时看到的位置
+                        anchorScroll = scrollState.value
+                        focusSettling = true
+                    } else if (!it.hasFocus) {
+                        focusSettling = false
+                    }
+                    fieldFocused = it.hasFocus
+                }
                 .verticalScroll(scrollState),
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
