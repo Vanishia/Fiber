@@ -21,8 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
@@ -36,6 +38,7 @@ import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -47,6 +50,8 @@ internal fun EditorEditPane(
     isAddingImage: Boolean,
     topContentInset: Dp,
     bottomContentInset: Dp,
+    initialScrollFraction: Float? = null,
+    onScrollFractionChanged: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -58,6 +63,9 @@ internal fun EditorEditPane(
     // 最近一次文本布局结果；键盘弹起等视口变化时按"当前"光标位置校正滚动，
     // 不能直接缓存光标矩形（onTextLayout 不随纯选区变化回调，缓存会过期）
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // 光标只在聚焦时显示，光标校正也仅限聚焦后；
+    // 否则刚进入编辑模式（选区默认在文末）会被误校正滚到最后一行
+    var fieldFocused by remember { mutableStateOf(false) }
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -66,6 +74,7 @@ internal fun EditorEditPane(
 
     // 光标不在可视范围时把它滚回来；光标可见时不做任何事，不与手动滚动打架
     fun revealCursorIfNeeded() {
+        if (!fieldFocused) return
         val layout = textLayoutResult ?: return
         val viewportHeight = scrollState.viewportSize
         if (viewportHeight <= 0) return
@@ -97,6 +106,22 @@ internal fun EditorEditPane(
         revealCursorIfNeeded()
     }
 
+    // 从预览切换到编辑时停留在相近位置：按滚动比例恢复（仅在进入时执行一次）
+    LaunchedEffect(Unit) {
+        val fraction = initialScrollFraction ?: return@LaunchedEffect
+        if (fraction <= 0f) return@LaunchedEffect
+        // 等内容量出真实可滚动范围再换算目标位置
+        snapshotFlow { scrollState.maxValue }.first { it > 0 }
+        scrollState.scrollTo((fraction * scrollState.maxValue).roundToInt())
+    }
+
+    // 上报滚动比例，供切回预览时恢复位置
+    LaunchedEffect(Unit) {
+        snapshotFlow { scrollState.value to scrollState.maxValue }.collect { (offset, max) ->
+            if (max > 0) onScrollFractionChanged(offset / max.toFloat())
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -111,6 +136,7 @@ internal fun EditorEditPane(
             },
             modifier = Modifier
                 .fillMaxSize()
+                .onFocusChanged { fieldFocused = it.isFocused }
                 .verticalScroll(scrollState),
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,

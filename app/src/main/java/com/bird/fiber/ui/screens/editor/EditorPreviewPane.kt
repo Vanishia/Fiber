@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.view.doOnPreDraw
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.image.AsyncDrawableScheduler
@@ -32,6 +33,8 @@ internal fun EditorPreviewPane(
     isRendering: Boolean,
     topContentInset: Dp,
     bottomContentInset: Dp,
+    initialScrollFraction: Float? = null,
+    onScrollFractionChanged: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -46,6 +49,8 @@ internal fun EditorPreviewPane(
                 renderedMarkdown = renderedMarkdown,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
+                initialScrollFraction = initialScrollFraction,
+                onScrollFractionChanged = onScrollFractionChanged,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -57,6 +62,8 @@ private fun MarkdownPreview(
     renderedMarkdown: Spanned?,
     topContentInset: Dp,
     bottomContentInset: Dp,
+    initialScrollFraction: Float?,
+    onScrollFractionChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -76,6 +83,8 @@ private fun MarkdownPreview(
     var lastLineHeightPx by remember { mutableStateOf(0) }
     var lastTopInsetPx by remember { mutableStateOf(0) }
     var lastBottomInsetPx by remember { mutableStateOf(0) }
+    // 从编辑切换回来时按滚动比例恢复位置（仅首次设置文本时执行一次）
+    var initialFractionApplied by remember { mutableStateOf(false) }
 
     AndroidView(
         modifier = modifier,
@@ -103,6 +112,12 @@ private fun MarkdownPreview(
                 tag = textView
             }
 
+            // 上报滚动比例，供切换到编辑时恢复位置
+            scrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                val maxScroll = (scrollView.getChildAt(0)?.height ?: 0) - scrollView.height
+                if (maxScroll > 0) onScrollFractionChanged(scrollY / maxScroll.toFloat())
+            }
+
             scrollView
         },
         update = { scrollView ->
@@ -116,6 +131,20 @@ private fun MarkdownPreview(
                 AsyncDrawableScheduler.schedule(textView)
                 lastRenderedText = renderedMarkdown
                 needsLayout = true
+
+                if (!initialFractionApplied) {
+                    initialFractionApplied = true
+                    val fraction = initialScrollFraction
+                    if (fraction != null && fraction > 0f) {
+                        // 等布局量出内容高度后再按比例滚动
+                        scrollView.doOnPreDraw {
+                            val maxScroll = (scrollView.getChildAt(0)?.height ?: 0) - scrollView.height
+                            if (maxScroll > 0) {
+                                scrollView.scrollTo(0, (fraction * maxScroll).toInt())
+                            }
+                        }
+                    }
+                }
             }
 
             if (lastTextSizePx != textSizePx) {

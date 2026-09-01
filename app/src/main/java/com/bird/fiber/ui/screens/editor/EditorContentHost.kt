@@ -9,12 +9,23 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+/**
+ * 编辑/预览之间共享的滚动比例
+ *
+ * 故意不用 Compose State：滚动期间每帧都在变，用普通变量承载，
+ * 只在切换视图组合新面板时读取一次，避免滚动引发整树重组
+ */
+private class ScrollFractionHolder {
+    var fraction: Float? = null
+}
 
 @Composable
 internal fun EditorContentHost(
@@ -31,6 +42,8 @@ internal fun EditorContentHost(
     val contentModifier = modifier
         .fillMaxSize()
         .padding(horizontal = 16.dp)
+    // 编辑/预览切换时停留在相近滚动位置
+    val scrollFractionHolder = remember { ScrollFractionHolder() }
 
     when {
         uiState.isLoading -> {
@@ -65,6 +78,8 @@ internal fun EditorContentHost(
                 isRendering = isRendering,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
+                initialScrollFraction = scrollFractionHolder.fraction,
+                onScrollFractionChanged = { scrollFractionHolder.fraction = it },
                 modifier = contentModifier
             )
         }
@@ -77,6 +92,8 @@ internal fun EditorContentHost(
                 isAddingImage = uiState.isAddingImage,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
+                initialScrollFraction = scrollFractionHolder.fraction,
+                onScrollFractionChanged = { scrollFractionHolder.fraction = it },
                 modifier = contentModifier
             )
         }
