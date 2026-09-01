@@ -65,7 +65,9 @@ internal fun EditorEditPane(
     // 不能直接缓存光标矩形（onTextLayout 不随纯选区变化回调，缓存会过期）
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     // 光标只在聚焦时显示，光标校正也仅限聚焦后；
-    // 否则刚进入编辑模式（选区默认在文末）会被误校正滚到最后一行
+    // 否则刚进入编辑模式（选区默认在文末）会被误校正滚到最后一行。
+    // 注意必须用 hasFocus：onFocusChanged 位于 BasicTextField 内部焦点目标的上游，
+    // 聚焦时拿到的是 Active 状态（isFocused=false，hasFocus=true），用 isFocused 恒为 false
     var fieldFocused by remember { mutableStateOf(false) }
     // 校正函数在 LaunchedEffect 里异步执行，必须读最新值而非启动时的旧闭包
     val currentValue by rememberUpdatedState(value)
@@ -124,22 +126,23 @@ internal fun EditorEditPane(
         revealCursorIfNeeded()
     }
 
-    // 聚焦瞬间系统会按聚焦时的旧选区（首次进入时是文末）尝试把光标滚进屏幕，
-    // 与点按产生的新选区存在竞争；聚焦后先略过点按落键窗口（此时选区还是旧值），
-    // 再逐帧校正直到滚动与键盘动画都稳定，避免固定次数校正跑完后系统动画还在滚动。
-    // 用户手动滚动时立即退出，不与手动滚动打架
+    // 聚焦瞬间系统会按聚焦时的旧选区（首次进入时是文末）发起 bringIntoView 动画，
+    // 与点按产生的新选区存在竞争；且这次动画可能晚于键盘动画才发起。
+    // 因此聚焦后至少校正 MIN_CORRECT_NANOS（覆盖键盘弹出延迟+动画+系统滚动尾部），
+    // 先略过点按落键窗口（此时选区还是旧值），再逐帧校正直到滚动与键盘都稳定。
+    // 最短窗口内无法区分系统滚动和用户滚动，宁可继续校正；窗口后用户手动滚动则立即退出
     LaunchedEffect(fieldFocused) {
         if (!fieldFocused) return@LaunchedEffect
         val startNanos = withFrameNanos { it }
         var stableFrames = 0
         var lastScrollValue = scrollState.value
         var lastImeBottom = imeInsets.getBottom(density)
-        while (stableFrames < 8) {
+        while (true) {
             val elapsed = withFrameNanos { it } - startNanos
-            if (elapsed > TAP_SETTLE_NANOS &&
-                scrollState.isScrollInProgress && !programmaticScroll
-            ) {
-                break
+            if (elapsed > FOCUS_CORRECT_TIMEOUT_NANOS) break
+            if (elapsed >= MIN_CORRECT_NANOS) {
+                if (scrollState.isScrollInProgress && !programmaticScroll) break
+                if (stableFrames >= 8) break
             }
             if (elapsed > TAP_SETTLE_NANOS) {
                 revealCursorIfNeeded()
@@ -150,7 +153,6 @@ internal fun EditorEditPane(
             stableFrames = if (scrollValue != lastScrollValue || imeBottom != lastImeBottom) 0 else stableFrames + 1
             lastScrollValue = scrollValue
             lastImeBottom = imeBottom
-            if (withFrameNanos { it } - startNanos > FOCUS_CORRECT_TIMEOUT_NANOS) break
         }
     }
 
@@ -186,7 +188,7 @@ internal fun EditorEditPane(
             },
             modifier = Modifier
                 .fillMaxSize()
-                .onFocusChanged { fieldFocused = it.isFocused }
+                .onFocusChanged { fieldFocused = it.hasFocus }
                 .verticalScroll(scrollState),
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
@@ -241,5 +243,11 @@ internal fun EditorEditPane(
 /** 聚焦后跳过校正的点按落键窗口：此时新选区尚未产生，按旧选区校正会误滚 */
 private const val TAP_SETTLE_NANOS = 200_000_000L
 
-/** 聚焦校正循环的最长持续时间，需覆盖键盘动画与系统侧焦点滚动 */
-private const val FOCUS_CORRECT_TIMEOUT_NANOS = 1_500_000_000L
+/**
+ * 聚焦校正循环的最短持续时间。键盘弹出有延迟，系统按旧选区发起的焦点滚动
+ * 可能在键盘动画结束后才执行，窗口必须盖住整条链路，否则校正提前退出就没人纠正
+ */
+private const val MIN_CORRECT_NANOS = 1_000_000_000L
+
+/** 聚焦校正循环的最长持续时间，防止异常情况下长驻 */
+private const val FOCUS_CORRECT_TIMEOUT_NANOS = 2_500_000_000L
