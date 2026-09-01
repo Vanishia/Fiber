@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,9 +12,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.bird.fiber.data.settings.SettingsDataStore
@@ -21,6 +26,8 @@ import com.bird.fiber.data.importing.ImportShareManager
 import com.bird.fiber.data.importing.PendingImport
 import com.bird.fiber.domain.sync.LibrarySyncManager
 import com.bird.fiber.ui.navigation.FiberNavGraph
+import com.bird.fiber.ui.screens.importing.ImportLibraryDialog
+import com.bird.fiber.ui.screens.importing.ImportViewModel
 import com.bird.fiber.ui.screens.settings.DarkMode
 import com.bird.fiber.ui.screens.settings.SettingsUiState
 import com.bird.fiber.ui.theme.FiberTheme
@@ -121,6 +128,27 @@ class MainActivity : ComponentActivity() {
                     onAddLibrary = { folderPickerLauncher.launch(null) },
                     modifier = Modifier.fillMaxSize()
                 )
+
+                // 外部文件导入：有待导入文件时弹出选库对话框
+                val importViewModel: ImportViewModel = hiltViewModel()
+                val pendingImport by importViewModel.pendingImport.collectAsStateWithLifecycle()
+                val importLibraries by importViewModel.libraries.collectAsStateWithLifecycle()
+                val context = LocalContext.current
+
+                LaunchedEffect(Unit) {
+                    importViewModel.saveResult.collect { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                pendingImport?.let { pending ->
+                    ImportLibraryDialog(
+                        fileName = pending.fileName,
+                        libraries = importLibraries,
+                        onSelect = { importViewModel.saveToLibrary(it) },
+                        onDismiss = { importViewModel.dismiss() }
+                    )
+                }
             }
         }
 
