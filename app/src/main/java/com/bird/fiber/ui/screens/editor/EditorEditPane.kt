@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -66,6 +67,9 @@ internal fun EditorEditPane(
     // 光标只在聚焦时显示，光标校正也仅限聚焦后；
     // 否则刚进入编辑模式（选区默认在文末）会被误校正滚到最后一行
     var fieldFocused by remember { mutableStateOf(false) }
+    // 校正函数在 LaunchedEffect 里异步执行，必须读最新值而非启动时的旧闭包，
+    // 否则点按后的选区更新还没传播进来，会按旧选区（文末）滚动
+    val currentValue by rememberUpdatedState(value)
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -78,7 +82,7 @@ internal fun EditorEditPane(
         val layout = textLayoutResult ?: return
         val viewportHeight = scrollState.viewportSize
         if (viewportHeight <= 0) return
-        val caret = value.selection.start.coerceIn(0, value.text.length)
+        val caret = currentValue.selection.start.coerceIn(0, currentValue.text.length)
         val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
@@ -104,6 +108,16 @@ internal fun EditorEditPane(
     }
     LaunchedEffect(imeBottomPx) {
         revealCursorIfNeeded()
+    }
+
+    // 聚焦瞬间系统会按旧选区（首次进入时是文末）尝试把光标滚进屏幕，
+    // 与点按产生的新选区存在竞争；聚焦后的短暂窗口内持续按当前光标校正
+    LaunchedEffect(fieldFocused) {
+        if (!fieldFocused) return@LaunchedEffect
+        repeat(12) {
+            revealCursorIfNeeded()
+            delay(50)
+        }
     }
 
     // 从预览切换到编辑时停留在相近位置：按滚动比例恢复（仅在进入时执行一次）
