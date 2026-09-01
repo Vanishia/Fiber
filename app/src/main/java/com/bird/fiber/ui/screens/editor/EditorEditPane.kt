@@ -98,23 +98,28 @@ internal fun EditorEditPane(
         val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
-        if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return
+        // 底部留出两行高度的避让区：光标一旦进入键盘上方的两线区域就开始跟随滚动，
+        // 每帧只补几个像素，视觉上随键盘平滑上移；
+        // 若等光标撞上键盘线再补这两行，会一次性瞬移约 120px
+        val keyboardMarginPx = rect.height * 2
+        val revealBottom = visibleBottom - keyboardMarginPx
+        if (rect.top >= visibleTop && rect.bottom <= revealBottom) return
         // 聚焦稳定期内可能被系统 stale 滚动带偏：优先回到锚点（点按时用户看到的位置）；
         // 锚点处光标会被键盘遮住时，从锚点出发做最小滚动（而不是从被带偏的位置算，
         // 否则会把光标贴到视口顶边，视觉上整页上移一个键盘高度）
         val anchor = anchorScroll
         val target = if (focusSettling && anchor != null) {
             val anchorTop = anchor.coerceIn(0, scrollState.maxValue).toFloat()
-            val anchorBottom = anchorTop + viewportHeight.toFloat()
+            val anchorRevealBottom = anchorTop + viewportHeight.toFloat() - keyboardMarginPx
             when {
-                rect.top >= anchorTop && rect.bottom <= anchorBottom -> anchorTop
-                rect.bottom > anchorBottom -> rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
+                rect.top >= anchorTop && rect.bottom <= anchorRevealBottom -> anchorTop
+                rect.bottom > anchorRevealBottom -> rect.bottom - viewportHeight.toFloat() + keyboardMarginPx
                 else -> rect.top - cursorRevealMarginPx
             }
         } else if (rect.top < visibleTop) {
             rect.top - cursorRevealMarginPx
         } else {
-            rect.bottom - viewportHeight.toFloat() + cursorRevealMarginPx
+            rect.bottom - viewportHeight.toFloat() + keyboardMarginPx
         }
         val coerced = target.roundToInt().coerceIn(0, scrollState.maxValue)
         if (coerced != scrollState.value) {
@@ -133,16 +138,14 @@ internal fun EditorEditPane(
     LaunchedEffect(value.selection) { localSelection = value.selection }
 
     // 键盘弹起/收起改变可视高度时，BasicTextField 自带的跟随光标只在输入时触发，
-    // 需要手动把光标滚回可视区；动画期间 imeBottomPx 逐帧变化，跟随逐帧校正即可。
-    // 不要在动画结束后再延迟补正：补正会以略有出入的目标再滚一次，
-    // 表现为"光标出现后屏幕又滚动一截"
+    // 需要手动把光标滚回可视区。
+    // ime/视口必须在 snapshotFlow 里读：在组合作用域读会让键盘动画的每一帧都
+    // 触发整个面板重组，滚动肉眼可见地卡；流内读取则不触发重组。
+    // 也不要在动画结束后再延迟补正：补正会以偏差目标再滚一次
     val imeInsets = WindowInsets.ime
-    val imeBottomPx = imeInsets.getBottom(density)
-    LaunchedEffect(scrollState.viewportSize) {
-        revealCursorIfNeeded()
-    }
-    LaunchedEffect(imeBottomPx) {
-        revealCursorIfNeeded()
+    LaunchedEffect(Unit) {
+        snapshotFlow { imeInsets.getBottom(density) to scrollState.viewportSize }
+            .collect { revealCursorIfNeeded() }
     }
 
     // 聚焦瞬间系统会按聚焦时的旧选区（首次进入时是文末）发起 bringIntoView 动画，
