@@ -37,3 +37,15 @@ sealed class FileResult<out T> {
     data class Error(val error: FileError) : FileResult<Nothing>()
     data object Loading : FileResult<Nothing>()
 }
+
+/** 成功时执行 [block]，返回自身便于链式调用 */
+inline fun <T> FileResult<T>.onSuccess(block: (T) -> Unit): FileResult<T> {
+    if (this is FileResult.Success) block(data)
+    return this
+}
+
+/** 失败时执行 [block]，返回自身便于链式调用 */
+inline fun <T> FileResult<T>.onError(block: (FileError) -> Unit): FileResult<T> {
+    if (this is FileResult.Error) block(error)
+    return this
+}
