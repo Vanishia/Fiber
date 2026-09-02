@@ -156,14 +156,14 @@ fun HeatmapScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                LibraryNoteCountsSection(
-                    counts = libraryNoteCounts,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
-
                 TimeOfDaySection(
                     counts = timeOfDayCounts,
                     stats = noteStats,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                LibraryNoteCountsSection(
+                    counts = libraryNoteCounts,
                     modifier = Modifier.padding(bottom = 28.dp)
                 )
 
@@ -484,10 +484,12 @@ private fun LibraryNoteCountsSection(
 }
 
 /**
- * 记录时段分布：0~6 / 6~12 / 12~18 / 18~24 四个时段的甜甜圈图 + 图例，
- * 右侧放"本月新增/本月字数/总字数/笔记总数"四张统计卡片；
+ * 记录时段分布：0~6 / 6~12 / 12~18 / 18~24 四个时段的甜甜圈图，
+ * 右侧放"本月新增/本月字数/总字数/笔记总数"四张统计卡片，
+ * 图例单独一行排在圆环下方，避免挤压卡片宽度；
  * 颜色统一用主题色的不同深浅
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TimeOfDaySection(
     counts: List<Int>,
@@ -508,7 +510,7 @@ private fun TimeOfDaySection(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Canvas(modifier = Modifier.size(96.dp)) {
+            Canvas(modifier = Modifier.size(112.dp)) {
                 val strokeWidth = size.minDimension / 5f
                 val diameter = size.minDimension - strokeWidth
                 val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
@@ -530,25 +532,6 @@ private fun TimeOfDaySection(
                     startAngle += sweep
                 }
             }
-            Spacer(modifier = Modifier.width(20.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                counts.forEachIndexed { index, count ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(segmentColors[index])
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "${TIME_OF_DAY_LABELS[index]}  ${count}篇",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
             Spacer(modifier = Modifier.width(16.dp))
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -564,10 +547,32 @@ private fun TimeOfDaySection(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(10.dp))
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            counts.forEachIndexed { index, _ ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(segmentColors[index])
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = TIME_OF_DAY_LABELS[index],
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 
-/** 单个统计卡片：数值 + 说明 */
+/** 单个统计卡片：数值（右对齐）+ 说明 */
 @Composable
 private fun StatCard(
     value: String,
@@ -575,17 +580,19 @@ private fun StatCard(
     modifier: Modifier = Modifier
 ) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.End,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth()
         )
         Text(
             text = label,
