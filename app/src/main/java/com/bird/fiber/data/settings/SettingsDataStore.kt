@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 import com.bird.fiber.ui.screens.settings.DarkMode
@@ -35,6 +36,10 @@ class SettingsDataStore @Inject constructor(
         private val COLOR_SCHEME = intPreferencesKey("color_scheme")
         private val THEME_SEED_COLOR = intPreferencesKey("theme_seed_color")
         private val DARK_MODE = intPreferencesKey("dark_mode")
+        private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
+
+        /** 快捷入口默认关键词 */
+        val DEFAULT_QUICK_SEARCH_KEYWORDS = listOf("日报", "TODO", "会议", "灵感", "项目")
     }
 
     /**
@@ -96,5 +101,31 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { preferences ->
             preferences[DARK_MODE] = mode.ordinal
         }
+    }
+
+    /**
+     * 保存搜索页快捷入口关键词列表（换行分隔存储，避免关键词自身含逗号时解析出错）
+     *
+     * 传入空列表时清除设置，展示侧回落到默认关键词
+     */
+    suspend fun saveQuickSearchKeywords(keywords: List<String>) {
+        dataStore.edit { preferences ->
+            if (keywords.isEmpty()) {
+                preferences.remove(QUICK_SEARCH_KEYWORDS)
+            } else {
+                preferences[QUICK_SEARCH_KEYWORDS] = keywords.joinToString("\n")
+            }
+        }
+    }
+
+    /**
+     * 获取搜索页快捷入口关键词列表，未设置时返回默认列表
+     */
+    val quickSearchKeywordsFlow: Flow<List<String>> = dataStore.data.map { preferences ->
+        preferences[QUICK_SEARCH_KEYWORDS]
+            ?.split("\n")
+            ?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_QUICK_SEARCH_KEYWORDS
     }
 }

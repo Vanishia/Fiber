@@ -18,11 +18,13 @@ import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.repository.FileRepository
+import com.bird.fiber.data.settings.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -45,7 +48,8 @@ class FileListViewModel @Inject constructor(
     private val markdownFileDao: MarkdownFileDao,
     private val libraryRepository: LibraryRepository,
     private val previewCache: PreviewCache,
-    private val fileRepository: FileRepository
+    private val fileRepository: FileRepository,
+    private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
@@ -88,6 +92,14 @@ class FileListViewModel @Inject constructor(
     val searchSort: StateFlow<SearchSort> = _searchSort.asStateFlow()
     val searchDateRange: StateFlow<SearchDateRange> = _searchDateRange.asStateFlow()
 
+    /** 搜索页"快捷入口"关键词，可在搜索页编辑并持久化 */
+    val quickSearchKeywords: StateFlow<List<String>> = settingsDataStore.quickSearchKeywordsFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = SettingsDataStore.DEFAULT_QUICK_SEARCH_KEYWORDS
+        )
+
     init {
         observeActiveLibrary()
         observeAppEvents()
@@ -126,6 +138,10 @@ class FileListViewModel @Inject constructor(
     fun updateSearchSort(sort: SearchSort) { _searchSort.value = sort }
 
     fun updateSearchDateRange(dateRange: SearchDateRange) { _searchDateRange.value = dateRange }
+
+    fun saveQuickSearchKeywords(keywords: List<String>) {
+        viewModelScope.launch { settingsDataStore.saveQuickSearchKeywords(keywords) }
+    }
 
     fun openSearchResult(file: MarkdownFileMeta, onReady: (String) -> Unit) {
         viewModelScope.launch {

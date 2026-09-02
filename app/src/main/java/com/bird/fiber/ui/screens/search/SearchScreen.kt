@@ -43,6 +43,7 @@ fun SearchScreen(
     val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
     val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
     val searchDateRange by viewModel.searchDateRange.collectAsStateWithLifecycle()
+    val quickSearchKeywords by viewModel.quickSearchKeywords.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     // "随机漫步"：当前随机命中的笔记（含全文），null 时弹窗不显示
@@ -87,6 +88,8 @@ fun SearchScreen(
                     onScopeChange = viewModel::updateSearchScope,
                     dateRange = searchDateRange,
                     onDateRangeChange = viewModel::updateSearchDateRange,
+                    quickSearchKeywords = quickSearchKeywords,
+                    onSaveQuickSearchKeywords = viewModel::saveQuickSearchKeywords,
                     onRandomMemoClick = {
                         viewModel.loadRandomMemo(searchScope) { memo -> randomMemo = memo }
                     },

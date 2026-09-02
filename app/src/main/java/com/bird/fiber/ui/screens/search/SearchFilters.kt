@@ -15,8 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePickerDialog
@@ -24,7 +26,9 @@ import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -57,11 +61,13 @@ internal fun EmptySearchContent(
     onScopeChange: (FileListViewModel.SearchScope) -> Unit,
     dateRange: FileListViewModel.SearchDateRange,
     onDateRangeChange: (FileListViewModel.SearchDateRange) -> Unit,
+    quickSearchKeywords: List<String>,
+    onSaveQuickSearchKeywords: (List<String>) -> Unit,
     onRandomMemoClick: () -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
-    val quickSearches = listOf("日报", "TODO", "会议", "灵感", "项目")
+    var showKeywordEditor by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier,
@@ -110,9 +116,19 @@ internal fun EmptySearchContent(
             SearchQuickSection(
                 title = "快捷入口",
                 subtitle = "用常搜词直接起步",
-                queries = quickSearches,
+                queries = quickSearchKeywords,
                 onQuickSearchClick = onQuickSearchClick,
-                isRecent = false
+                isRecent = false,
+                trailing = {
+                    IconButton(onClick = { showKeywordEditor = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "编辑快捷关键词",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             )
         }
 
@@ -127,7 +143,70 @@ internal fun EmptySearchContent(
             RandomMemoEntryCard(onClick = onRandomMemoClick)
         }
     }
+
+    if (showKeywordEditor) {
+        QuickSearchKeywordEditorDialog(
+            initialKeywords = quickSearchKeywords,
+            onDismiss = { showKeywordEditor = false },
+            onSave = { keywords ->
+                onSaveQuickSearchKeywords(keywords)
+                showKeywordEditor = false
+            }
+        )
+    }
 }
+
+/**
+ * 快捷入口关键词编辑弹窗
+ *
+ * 多行输入，每行一个关键词，也可用逗号/空格分隔；
+ * 清空后保存会恢复默认关键词
+ */
+@Composable
+private fun QuickSearchKeywordEditorDialog(
+    initialKeywords: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit
+) {
+    var text by remember(initialKeywords) { mutableStateOf(initialKeywords.joinToString("\n")) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑快捷关键词") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("每行一个关键词") },
+                    minLines = 3,
+                    maxLines = 6
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "支持换行、逗号或空格分隔；留空保存将恢复默认。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(parseKeywords(text)) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+/** 把用户输入拆成关键词列表：去空白、去重，最多保留 12 个 */
+private fun parseKeywords(text: String): List<String> =
+    text.split('\n', ',', '，', '、', ' ', '　')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .take(12)
 
 /**
  * "条件搜索"卡片——按笔记修改日期过滤搜索结果
@@ -337,9 +416,10 @@ private fun SearchQuickSection(
     subtitle: String,
     queries: List<String>,
     onQuickSearchClick: (String) -> Unit,
-    isRecent: Boolean
+    isRecent: Boolean,
+    trailing: (@Composable () -> Unit)? = null
 ) {
-    SearchSectionCard(title = title, subtitle = subtitle) {
+    SearchSectionCard(title = title, subtitle = subtitle, trailing = trailing) {
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -384,6 +464,7 @@ private fun SearchQuickSection(
 private fun SearchSectionCard(
     title: String,
     subtitle: String,
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Card(
@@ -399,17 +480,22 @@ private fun SearchSectionCard(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                trailing?.invoke()
+            }
             Spacer(modifier = Modifier.height(14.dp))
             content()
         }
