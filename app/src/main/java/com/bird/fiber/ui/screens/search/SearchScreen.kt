@@ -29,7 +29,7 @@ import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
  * 搜索页面
  *
  * 支持文件名和正文搜索，点击结果直接跳转到编辑器
- * 未来可扩展：相关性排序、日期筛选、标签筛选
+ * 支持按修改日期范围过滤结果
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +42,7 @@ fun SearchScreen(
 ) {
     val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
     val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
+    val searchDateRange by viewModel.searchDateRange.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     // "随机漫步"：当前随机命中的笔记（含全文），null 时弹窗不显示
@@ -84,6 +85,8 @@ fun SearchScreen(
                     onQuickSearchClick = { query -> searchQuery = query },
                     scope = searchScope,
                     onScopeChange = viewModel::updateSearchScope,
+                    dateRange = searchDateRange,
+                    onDateRangeChange = viewModel::updateSearchDateRange,
                     onRandomMemoClick = {
                         viewModel.loadRandomMemo(searchScope) { memo -> randomMemo = memo }
                     },

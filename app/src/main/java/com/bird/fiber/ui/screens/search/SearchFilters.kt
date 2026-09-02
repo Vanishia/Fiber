@@ -19,6 +19,10 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -27,25 +31,37 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private const val DAY_MILLIS = 24L * 60 * 60 * 1000
 
 @Composable
 internal fun EmptySearchContent(
     onQuickSearchClick: (String) -> Unit,
     scope: FileListViewModel.SearchScope,
     onScopeChange: (FileListViewModel.SearchScope) -> Unit,
+    dateRange: FileListViewModel.SearchDateRange,
+    onDateRangeChange: (FileListViewModel.SearchDateRange) -> Unit,
     onRandomMemoClick: () -> Unit,
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
     val quickSearches = listOf("日报", "TODO", "会议", "灵感", "项目")
-    val recentSearches = listOf("日志", "项目", "想法", "会议", "记录")
 
     LazyColumn(
         modifier = modifier,
@@ -101,12 +117,9 @@ internal fun EmptySearchContent(
         }
 
         item {
-            SearchQuickSection(
-                title = "最近搜索",
-                subtitle = "先用静态占位，后面可以接真实历史",
-                queries = recentSearches,
-                onQuickSearchClick = onQuickSearchClick,
-                isRecent = true
+            DateFilterSection(
+                dateRange = dateRange,
+                onDateRangeChange = onDateRangeChange
             )
         }
 
@@ -115,6 +128,112 @@ internal fun EmptySearchContent(
         }
     }
 }
+
+/**
+ * "条件搜索"卡片——按笔记修改日期过滤搜索结果
+ *
+ * 预设区间（最近 7/30/90 天）以点击时刻为基准；
+ * "自定义"通过日期区间选择器指定起止日期
+ */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun DateFilterSection(
+    dateRange: FileListViewModel.SearchDateRange,
+    onDateRangeChange: (FileListViewModel.SearchDateRange) -> Unit
+) {
+    var showRangePicker by remember { mutableStateOf(false) }
+    val presets = listOf(
+        FileListViewModel.SearchDatePreset.ALL_TIME to "全部时间",
+        FileListViewModel.SearchDatePreset.LAST_7_DAYS to "最近7天",
+        FileListViewModel.SearchDatePreset.LAST_30_DAYS to "最近30天",
+        FileListViewModel.SearchDatePreset.LAST_90_DAYS to "最近90天"
+    )
+
+    SearchSectionCard(title = "条件搜索", subtitle = "按修改日期过滤结果，可与关键词叠加") {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            presets.forEach { (preset, label) ->
+                FilterChip(
+                    selected = dateRange.preset == preset,
+                    onClick = {
+                        onDateRangeChange(
+                            FileListViewModel.SearchDateRange(
+                                preset = preset,
+                                fromMillis = presetFromMillis(preset),
+                                toMillis = null
+                            )
+                        )
+                    },
+                    label = { Text(label) }
+                )
+            }
+            FilterChip(
+                selected = dateRange.preset == FileListViewModel.SearchDatePreset.CUSTOM,
+                onClick = { showRangePicker = true },
+                label = {
+                    val isCustomActive = dateRange.preset == FileListViewModel.SearchDatePreset.CUSTOM &&
+                        dateRange.fromMillis != null && dateRange.toMillis != null
+                    Text(
+                        if (isCustomActive) {
+                            "自定义（${formatShortDate(dateRange.fromMillis!!)} ~ ${formatShortDate(dateRange.toMillis!!)}）"
+                        } else {
+                            "自定义"
+                        }
+                    )
+                }
+            )
+        }
+    }
+
+    if (showRangePicker) {
+        val pickerState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = dateRange.fromMillis,
+            initialSelectedEndDateMillis = dateRange.toMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showRangePicker = false },
+            confirmButton = {
+                TextButton(
+                    enabled = pickerState.selectedStartDateMillis != null &&
+                        pickerState.selectedEndDateMillis != null,
+                    onClick = {
+                        val start = pickerState.selectedStartDateMillis
+                        val end = pickerState.selectedEndDateMillis
+                        if (start != null && end != null) {
+                            onDateRangeChange(
+                                FileListViewModel.SearchDateRange(
+                                    preset = FileListViewModel.SearchDatePreset.CUSTOM,
+                                    fromMillis = start,
+                                    toMillis = end + DAY_MILLIS - 1
+                                )
+                            )
+                        }
+                        showRangePicker = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRangePicker = false }) { Text("取消") }
+            }
+        ) {
+            DateRangePicker(state = pickerState)
+        }
+    }
+}
+
+/** 预设区间的起点毫秒值；null 表示不限时间 */
+private fun presetFromMillis(preset: FileListViewModel.SearchDatePreset): Long? = when (preset) {
+    FileListViewModel.SearchDatePreset.ALL_TIME -> null
+    FileListViewModel.SearchDatePreset.LAST_7_DAYS -> System.currentTimeMillis() - 7 * DAY_MILLIS
+    FileListViewModel.SearchDatePreset.LAST_30_DAYS -> System.currentTimeMillis() - 30 * DAY_MILLIS
+    FileListViewModel.SearchDatePreset.LAST_90_DAYS -> System.currentTimeMillis() - 90 * DAY_MILLIS
+    FileListViewModel.SearchDatePreset.CUSTOM -> null
+}
+
+private fun formatShortDate(millis: Long): String =
+    SimpleDateFormat("M月d日", Locale.getDefault()).format(Date(millis))
 
 /**
  * "随机漫步"入口卡片——整卡可点击

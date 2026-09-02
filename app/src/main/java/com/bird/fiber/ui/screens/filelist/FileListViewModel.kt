@@ -51,6 +51,19 @@ class FileListViewModel @Inject constructor(
     enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
     enum class SearchSort { RELEVANCE, RECENT_MODIFIED }
 
+    /**
+     * 搜索日期条件：按笔记修改时间（last_modified）过滤结果
+     *
+     * fromMillis 为 null 且 toMillis 为 null 表示不限时间
+     */
+    enum class SearchDatePreset { ALL_TIME, LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, CUSTOM }
+
+    data class SearchDateRange(
+        val preset: SearchDatePreset = SearchDatePreset.ALL_TIME,
+        val fromMillis: Long? = null,
+        val toMillis: Long? = null
+    )
+
     private val _uiState = MutableStateFlow(FileListUiState())
     val uiState: StateFlow<FileListUiState> = _uiState.asStateFlow()
 
@@ -69,9 +82,11 @@ class FileListViewModel @Inject constructor(
     private val _searchQueryInput = MutableStateFlow("")
     private val _searchScope = MutableStateFlow(SearchScope.CURRENT_LIBRARY)
     private val _searchSort = MutableStateFlow(SearchSort.RELEVANCE)
+    private val _searchDateRange = MutableStateFlow(SearchDateRange())
 
     val searchScope: StateFlow<SearchScope> = _searchScope.asStateFlow()
     val searchSort: StateFlow<SearchSort> = _searchSort.asStateFlow()
+    val searchDateRange: StateFlow<SearchDateRange> = _searchDateRange.asStateFlow()
 
     init {
         observeActiveLibrary()
@@ -88,12 +103,15 @@ class FileListViewModel @Inject constructor(
     ) { libraryId, searchQuery, scope, sort, refreshVersion ->
         PagerParams(libraryId, searchQuery, scope, sort, refreshVersion)
     }
+        .combine(_searchDateRange) { params, dateRange ->
+            params.copy(dateRange = dateRange)
+        }
         .distinctUntilChanged()
         .flatMapLatest { params ->
             if (params.libraryId == null) {
                 flowOf(androidx.paging.PagingData.empty())
             } else {
-                createPager(params.libraryId, params.searchQuery, params.scope, params.sort)
+                createPager(params.libraryId, params.searchQuery, params.scope, params.sort, params.dateRange)
             }
         }
 
@@ -106,6 +124,8 @@ class FileListViewModel @Inject constructor(
     fun updateSearchScope(scope: SearchScope) { _searchScope.value = scope }
 
     fun updateSearchSort(sort: SearchSort) { _searchSort.value = sort }
+
+    fun updateSearchDateRange(dateRange: SearchDateRange) { _searchDateRange.value = dateRange }
 
     fun openSearchResult(file: MarkdownFileMeta, onReady: (String) -> Unit) {
         viewModelScope.launch {
@@ -282,7 +302,8 @@ class FileListViewModel @Inject constructor(
         libraryId: String?,
         searchQuery: String,
         scope: SearchScope,
-        sort: SearchSort
+        sort: SearchSort,
+        dateRange: SearchDateRange
     ): Flow<PagingData<MarkdownFileMeta>> {
         return Pager(
             config = AndroidPagingConfig(
@@ -295,13 +316,13 @@ class FileListViewModel @Inject constructor(
                 if (searchQuery.isBlank() && libraryId != null) {
                     markdownFileDao.getFilesByLibrarySummary(libraryId)
                 } else if (scope == SearchScope.ALL_LIBRARIES && searchQuery.isNotBlank()) {
-                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchAllFilesByRelevance(searchQuery)
-                    else markdownFileDao.searchAllFilesByModified(searchQuery)
+                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchAllFilesByRelevance(searchQuery, dateRange.fromMillis, dateRange.toMillis)
+                    else markdownFileDao.searchAllFilesByModified(searchQuery, dateRange.fromMillis, dateRange.toMillis)
                 } else if (libraryId != null) {
-                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchFilesByRelevance(libraryId, searchQuery)
-                    else markdownFileDao.searchFilesSummary(libraryId, searchQuery)
+                    if (sort == SearchSort.RELEVANCE) markdownFileDao.searchFilesByRelevance(libraryId, searchQuery, dateRange.fromMillis, dateRange.toMillis)
+                    else markdownFileDao.searchFilesSummary(libraryId, searchQuery, dateRange.fromMillis, dateRange.toMillis)
                 } else {
-                    markdownFileDao.searchAllFilesByModified(searchQuery)
+                    markdownFileDao.searchAllFilesByModified(searchQuery, dateRange.fromMillis, dateRange.toMillis)
                 }
             }
         ).flow.map { pagingData ->
@@ -401,7 +422,8 @@ class FileListViewModel @Inject constructor(
         val searchQuery: String,
         val scope: SearchScope,
         val sort: SearchSort,
-        val refreshVersion: Int
+        val refreshVersion: Int,
+        val dateRange: SearchDateRange = SearchDateRange()
     )
 }
 

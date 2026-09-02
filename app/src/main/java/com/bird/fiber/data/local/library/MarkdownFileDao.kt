@@ -116,9 +116,11 @@ interface MarkdownFileDao {
             OR path LIKE '%' || :query || '%'
             OR content_text LIKE '%' || :query || '%'
         )
+        AND (:fromMillis IS NULL OR last_modified >= :fromMillis)
+        AND (:toMillis IS NULL OR last_modified < :toMillis)
         ORDER BY last_modified DESC
     """)
-    fun searchFilesSummary(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
+    fun searchFilesSummary(libraryId: String, query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
@@ -132,6 +134,8 @@ interface MarkdownFileDao {
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        AND (:fromMillis IS NULL OR last_modified >= :fromMillis)
+        AND (:toMillis IS NULL OR last_modified < :toMillis)
         ORDER BY CASE
             WHEN name = :query OR name = :query || '.md' THEN 0
             WHEN name LIKE :query || '%' THEN 1
@@ -139,7 +143,7 @@ interface MarkdownFileDao {
             ELSE 3
         END, last_modified DESC
     """)
-    fun searchFilesByRelevance(libraryId: String, query: String): PagingSource<Int, MarkdownFileSummary>
+    fun searchFilesByRelevance(libraryId: String, query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
@@ -153,6 +157,8 @@ interface MarkdownFileDao {
         FROM markdown_files
         WHERE is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        AND (:fromMillis IS NULL OR last_modified >= :fromMillis)
+        AND (:toMillis IS NULL OR last_modified < :toMillis)
         ORDER BY CASE
             WHEN name = :query OR name = :query || '.md' THEN 0
             WHEN name LIKE :query || '%' THEN 1
@@ -160,7 +166,7 @@ interface MarkdownFileDao {
             ELSE 3
         END, last_modified DESC
     """)
-    fun searchAllFilesByRelevance(query: String): PagingSource<Int, MarkdownFileSummary>
+    fun searchAllFilesByRelevance(query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
@@ -174,9 +180,11 @@ interface MarkdownFileDao {
         FROM markdown_files
         WHERE is_deleted = 0
         AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        AND (:fromMillis IS NULL OR last_modified >= :fromMillis)
+        AND (:toMillis IS NULL OR last_modified < :toMillis)
         ORDER BY last_modified DESC
     """)
-    fun searchAllFilesByModified(query: String): PagingSource<Int, MarkdownFileSummary>
+    fun searchAllFilesByModified(query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     /**
      * 获取指定库的文件数量
