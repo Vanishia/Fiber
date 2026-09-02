@@ -75,35 +75,6 @@ internal fun EmptySearchContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = LocalFiberSurfaceColors.current.contentCard
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 18.dp)
-                ) {
-                    Text(
-                        text = "搜索笔记",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "同时匹配标题、正文和路径。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        item {
             SearchOptionSection(
                 title = "搜索范围",
                 options = listOf("当前库" to FileListViewModel.SearchScope.CURRENT_LIBRARY, "全库" to FileListViewModel.SearchScope.ALL_LIBRARIES),
