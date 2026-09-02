@@ -1,5 +1,6 @@
 package com.bird.fiber.ui.screens.heatmap
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,12 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.bird.fiber.data.local.library.LibraryNoteCount
 import com.bird.fiber.domain.heatmap.HeatmapDay
 import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
 import com.bird.fiber.ui.components.FloatingBackTopBar
@@ -60,7 +67,7 @@ import java.time.YearMonth
  *
  * 默认展示最近一年的全量热力图（可左右滑动）；
  * 顶栏右侧筛选菜单：全部笔记 / 选择月份（单月日历视图）/ 选择年份（整年周视图）；
- * 说明文字在热力图下方
+ * 热力图下方依次是"各库笔记数"横条图、"记录时段"甜甜圈图和说明文字
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -71,6 +78,9 @@ fun HeatmapScreen(
     viewModel: HeatmapPageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val libraryNoteCounts by viewModel.libraryNoteCounts.collectAsStateWithLifecycle()
+    val timeOfDayCounts by viewModel.timeOfDayCounts.collectAsStateWithLifecycle()
+    val noteStats by viewModel.noteStats.collectAsStateWithLifecycle()
     var menuExpanded by remember { mutableStateOf(false) }
     var pickerMode by remember { mutableStateOf<HeatmapPickerMode?>(null) }
     val today = remember { LocalDate.now() }
@@ -145,6 +155,17 @@ fun HeatmapScreen(
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
+
+                LibraryNoteCountsSection(
+                    counts = libraryNoteCounts,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                TimeOfDaySection(
+                    counts = timeOfDayCounts,
+                    stats = noteStats,
+                    modifier = Modifier.padding(bottom = 28.dp)
+                )
 
                 Text(
                     text = "热力图统计每个笔记归属的日期：快速笔记按文件名中的时间戳计入创建当天，" +
@@ -398,6 +419,187 @@ private fun MonthCalendarGrid(
     }
 }
 
+/**
+ * 各库笔记数横条图：库名 + 比例横条 + 数量，
+ * 横条统一用主题色，按占比加深浅差异
+ */
+@Composable
+private fun LibraryNoteCountsSection(
+    counts: List<LibraryNoteCount>,
+    modifier: Modifier = Modifier
+) {
+    if (counts.isEmpty()) return
+    val maxCount = counts.maxOf { it.count }.coerceAtLeast(1)
+
+    Column(modifier = modifier) {
+        Text(
+            text = "各库笔记数",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        counts.forEach { item ->
+            val fraction = item.count.toFloat() / maxCount
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = item.libraryName ?: "未命名库",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(80.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraction)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f + 0.65f * fraction)
+                            )
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = item.count.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 记录时段分布：0~6 / 6~12 / 12~18 / 18~24 四个时段的甜甜圈图 + 图例，
+ * 右侧放"本月新增/本月字数/总字数/笔记总数"四张统计卡片；
+ * 颜色统一用主题色的不同深浅
+ */
+@Composable
+private fun TimeOfDaySection(
+    counts: List<Int>,
+    stats: NoteStats,
+    modifier: Modifier = Modifier
+) {
+    val total = counts.sum()
+    if (counts.size != TIME_OF_DAY_LABELS.size || total == 0) return
+
+    val primary = MaterialTheme.colorScheme.primary
+    val segmentColors = LEVEL_ALPHAS.map { primary.copy(alpha = it) }
+
+    Column(modifier = modifier) {
+        Text(
+            text = "记录时段",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Canvas(modifier = Modifier.size(96.dp)) {
+                val strokeWidth = size.minDimension / 5f
+                val diameter = size.minDimension - strokeWidth
+                val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+                val arcSize = Size(diameter, diameter)
+                var startAngle = -90f
+                counts.forEachIndexed { index, count ->
+                    val sweep = 360f * count / total
+                    if (count > 0) {
+                        drawArc(
+                            color = segmentColors[index],
+                            startAngle = startAngle,
+                            sweepAngle = sweep,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth)
+                        )
+                    }
+                    startAngle += sweep
+                }
+            }
+            Spacer(modifier = Modifier.width(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                counts.forEachIndexed { index, count ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(segmentColors[index])
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${TIME_OF_DAY_LABELS[index]}  ${count}篇",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard(value = stats.monthCount.toString(), label = "本月新增", modifier = Modifier.weight(1f))
+                    StatCard(value = formatCharCount(stats.monthChars), label = "本月字数", modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard(value = formatCharCount(stats.totalChars), label = "总字数", modifier = Modifier.weight(1f))
+                    StatCard(value = stats.totalCount.toString(), label = "笔记总数", modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+/** 单个统计卡片：数值 + 说明 */
+@Composable
+private fun StatCard(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+/** 字数格式化：过万时用"x.x万"缩写，避免卡片放不下 */
+private fun formatCharCount(chars: Long): String =
+    if (chars >= 10000) "%.1f万".format(chars / 10000.0) else chars.toString()
+
 @Composable
 private fun WeekGridCell(
     day: HeatmapDay,
@@ -453,6 +655,7 @@ private fun monthCellTextColor(level: Int): Color {
 }
 
 private val LEVEL_ALPHAS = floatArrayOf(0.25f, 0.45f, 0.7f, 1f)
+private val TIME_OF_DAY_LABELS = listOf("0~6点", "6~12点", "12~18点", "18~24点")
 private val WEEKDAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
 private const val CELL_SIZE_DP = 13
 private const val CELL_SPACING_DP = 3

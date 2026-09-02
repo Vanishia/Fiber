@@ -292,15 +292,28 @@ interface MarkdownFileDao {
     suspend fun getRandomFileSummaryByLibrary(libraryId: String): MarkdownFileSummary?
 
     /**
-     * 观察全库笔记的文件名与修改时间（记录热力图数据源）
+     * 观察全库笔记的文件名、修改时间与正文字数（记录热力图数据源）
      *
      * 返回 Flow：索引任何变化（保存/删除/同步）都会自动推送新聚合结果
      */
     @Query("""
-        SELECT name, last_modified FROM markdown_files
+        SELECT name, last_modified, LENGTH(content_text) AS char_count FROM markdown_files
         WHERE is_deleted = 0
     """)
     fun observeHeatmapEntries(): Flow<List<MarkdownHeatmapEntry>>
+
+    /**
+     * 各库笔记数统计（热力图页"各库笔记数"横条图），按数量降序
+     */
+    @Query("""
+        SELECT (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               COUNT(*) AS count
+        FROM markdown_files
+        WHERE is_deleted = 0
+        GROUP BY library_id
+        ORDER BY count DESC
+    """)
+    fun observeLibraryNoteCounts(): Flow<List<LibraryNoteCount>>
 
     /**
      * 获取所有库的文件摘要（"全部笔记"页面，按修改时间倒序）

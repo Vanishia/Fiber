@@ -171,11 +171,22 @@ data class MarkdownImageNoteContent(
 )
 
 /**
- * 热力图聚合用的最小投影——只取文件名和修改时间，避免加载正文
+ * 热力图聚合用的最小投影——只取文件名、修改时间和正文字数，避免加载正文
+ *
+ * 字数字段由 SQL 的 LENGTH(content_text) 计算，不把正文读进内存
  */
 data class MarkdownHeatmapEntry(
     @ColumnInfo(name = "name") val name: String,
-    @ColumnInfo(name = "last_modified") val lastModified: Long
+    @ColumnInfo(name = "last_modified") val lastModified: Long,
+    @ColumnInfo(name = "char_count") val charCount: Int
+)
+
+/**
+ * 各库笔记数统计投影（热力图页"各库笔记数"横条图）
+ */
+data class LibraryNoteCount(
+    @ColumnInfo(name = "library_name") val libraryName: String?,
+    @ColumnInfo(name = "count") val count: Int
 )
 
 fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {

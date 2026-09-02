@@ -32,6 +32,16 @@ fun parseQuickNoteDate(fileName: String): LocalDate? {
 }
 
 /**
+ * 从快速笔记文件名解析创建小时（0~23）；不符合命名约定时返回 null
+ *
+ * 供"记录时段"统计使用，与 [parseQuickNoteDate] 同源
+ */
+fun parseQuickNoteHour(fileName: String): Int? {
+    if (!isQuickNoteFileName(fileName)) return null
+    return fileName.substring(9, 11).toIntOrNull()
+}
+
+/**
  * 匹配任意快速笔记文件名的 SQLite GLOB 模式（与 [QUICK_NOTE_PATTERN] 等价）
  */
 const val ANY_QUICK_NOTE_GLOB =
