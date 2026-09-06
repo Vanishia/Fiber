@@ -41,7 +41,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
+import com.bird.fiber.data.config.PagingConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
+import com.bird.fiber.ui.components.DraggableScrollbar
 import com.bird.fiber.ui.components.FloatingTopAppBar
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
@@ -302,62 +304,77 @@ private fun FileList(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
-    ) {
-        items(
-            count = lazyPagingItems.itemCount,
-            key = lazyPagingItems.itemKey { it.uri }
-        ) { index ->
-            val file = lazyPagingItems[index]
-            if (file != null) {
-                FileListItem(
-                    file = file,
-                    displayPreview = file.preview,
-                    onClick = { onFileClick(file.uri, false) },
-                    onLongClick = { onLongPress(file) },
-                    onDelete = { onDeleteRequest(file.name.removeSuffix(".md"), file.uri) },
-                    onEdit = { onEditRequest(file.uri) },
-                    modifier = Modifier.animateItem()
-                )
-            }
-        }
-
-        when (lazyPagingItems.loadState.append) {
-            is androidx.paging.LoadState.Loading -> {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            items(
+                count = lazyPagingItems.itemCount,
+                key = lazyPagingItems.itemKey { it.uri }
+            ) { index ->
+                val file = lazyPagingItems[index]
+                if (file != null) {
+                    FileListItem(
+                        file = file,
+                        displayPreview = file.preview,
+                        onClick = { onFileClick(file.uri, false) },
+                        onLongClick = { onLongPress(file) },
+                        onDelete = { onDeleteRequest(file.name.removeSuffix(".md"), file.uri) },
+                        onEdit = { onEditRequest(file.uri) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
             }
 
-            is androidx.paging.LoadState.Error -> {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "加载更多失败",
-                            color = MaterialTheme.colorScheme.error
-                        )
+            when (lazyPagingItems.loadState.append) {
+                is androidx.paging.LoadState.Loading -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
-            }
 
-            else -> Unit
+                is androidx.paging.LoadState.Error -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "加载更多失败",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+
+                else -> Unit
+            }
         }
+
+        DraggableScrollbar(
+            state = listState,
+            // 分页未加载完时预留一页虚拟余量压缩 thumb 行程，缓解追加加载时的位置回跳
+            extraUnloadedItems = if (lazyPagingItems.loadState.append.endOfPaginationReached) {
+                0
+            } else {
+                PagingConfig.PAGE_SIZE
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(top = topPadding + 2.dp, bottom = 10.dp)
+        )
     }
 
     if (
