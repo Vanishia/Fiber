@@ -30,3 +30,9 @@
 # incorrectly when used through the legacy Coil 0.13 adapter. The symptom is
 # that release builds render only the Markdown image's alt text.
 -keep class io.noties.markwon.image.** { *; }
+
+# 与上面同理：db84475 起 Coil 回调从 CoilImagesPlugin（markwon 包内，已被上条覆盖）
+# 移到了本插件的匿名 Target 里，不在 markwon 包下，必须单独 keep，
+# 否则 release 包同样只渲染图片 alt 文本。
+-keep class com.bird.fiber.utils.ProgressiveCoilImagesPlugin { *; }
+-keep class com.bird.fiber.utils.ProgressiveCoilImagesPlugin$* { *; }
