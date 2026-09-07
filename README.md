@@ -2,6 +2,8 @@
 
 > 轻量级 Markdown 笔记应用，强调快速记录与本地优先
 
+中文 | [English](./README_EN.md)
+
 [![Android](https://img.shields.io/badge/Android-8.1%2B-green.svg)](https://android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-blue.svg)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Compose-1.7+-purple.svg)](https://developer.android.com/jetpack/compose)
@@ -61,7 +63,6 @@ Fiber 是一款轻量级的 Markdown 笔记应用，专注于**快速记录**体
 | **架构** | Hilt | 依赖注入 |
 | **架构** | StateFlow | 响应式状态管理 |
 | **工具** | Timber | 日志管理 |
-| **工具** | Markwon | Markdown 渲染 |
 | **工具** | Coil | 图片加载 |
 
 ### 模块结构
