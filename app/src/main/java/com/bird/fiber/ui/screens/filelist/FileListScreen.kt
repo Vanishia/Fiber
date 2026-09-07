@@ -69,6 +69,7 @@ fun FileListScreen(
     viewModel: FileListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val listViewMode by viewModel.listViewMode.collectAsStateWithLifecycle()
 
     // 获取响应式 Paging 数据（当库或搜索词变化时自动更新）
     val lazyPagingItems = viewModel.pager.collectAsLazyPagingItems()
@@ -229,6 +230,7 @@ fun FileListScreen(
                     onSearchClick = onSearchClick,
                     onCreateClick = { showCreateFileDialog = true },
                     currentLibraryName = currentLibraryName,
+                    viewMode = listViewMode,
                     onListScroll = onListScroll,
                     scrollToTopSignal = scrollToTopSignal,
                     topBarModifier = topBarModifier,

@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,6 +49,7 @@ import com.bird.fiber.data.config.PagingConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.components.DraggableScrollbar
 import com.bird.fiber.ui.components.FloatingTopAppBar
+import com.bird.fiber.ui.screens.settings.ListViewMode
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
 
@@ -88,6 +93,7 @@ fun FileListContent(
     currentLibraryName: String? = null,
     onListScroll: () -> Unit = {},
     scrollToTopSignal: Int = 0,
+    viewMode: ListViewMode = ListViewMode.LIST,
     topBarModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -150,7 +156,8 @@ fun FileListContent(
                     },
                     topPadding = listTopPadding,
                     onListScroll = onListScroll,
-                    scrollToTopSignal = scrollToTopSignal
+                    scrollToTopSignal = scrollToTopSignal,
+                    viewMode = viewMode
                 )
             }
         }
@@ -282,6 +289,54 @@ private fun FileList(
     onLongPress: (MarkdownFileMeta) -> Unit,
     topPadding: androidx.compose.ui.unit.Dp,
     onListScroll: () -> Unit,
+    scrollToTopSignal: Int = 0,
+    viewMode: ListViewMode = ListViewMode.LIST
+) {
+    if (viewMode == ListViewMode.GRID) {
+        WaterfallGrid(
+            lazyPagingItems = lazyPagingItems,
+            onFileClick = onFileClick,
+            onLongPress = onLongPress,
+            topPadding = topPadding,
+            onListScroll = onListScroll,
+            scrollToTopSignal = scrollToTopSignal
+        )
+    } else {
+        EntryList(
+            lazyPagingItems = lazyPagingItems,
+            onFileClick = onFileClick,
+            onDeleteRequest = onDeleteRequest,
+            onEditRequest = onEditRequest,
+            onLongPress = onLongPress,
+            topPadding = topPadding,
+            onListScroll = onListScroll,
+            scrollToTopSignal = scrollToTopSignal
+        )
+    }
+
+    if (
+        lazyPagingItems.itemCount == 0 &&
+        lazyPagingItems.loadState.refresh is androidx.paging.LoadState.NotLoading
+    ) {
+        FileListEmpty(
+            searchQuery = searchQuery,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+/**
+ * 条目模式：单列 LazyColumn + 右侧可拖动滚动条
+ */
+@Composable
+private fun EntryList(
+    lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
+    onFileClick: (String, Boolean) -> Unit,
+    onDeleteRequest: (String, String) -> Unit,
+    onEditRequest: (String) -> Unit,
+    onLongPress: (MarkdownFileMeta) -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp,
+    onListScroll: () -> Unit,
     scrollToTopSignal: Int = 0
 ) {
     val listState = rememberLazyListState()
@@ -376,14 +431,100 @@ private fun FileList(
                 .padding(top = topPadding + 2.dp, bottom = 10.dp)
         )
     }
+}
 
-    if (
-        lazyPagingItems.itemCount == 0 &&
-        lazyPagingItems.loadState.refresh is androidx.paging.LoadState.NotLoading
+/**
+ * 瀑布流模式：双列 LazyVerticalStaggeredGrid，卡片高度按内容自然错开
+ *
+ * 不支持左右滑动删除/编辑（手势与双列网格布局冲突），仅保留点击与长按菜单；
+ * 可拖动滚动条仅适配单列 LazyListState，瀑布流模式下隐藏
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun WaterfallGrid(
+    lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
+    onFileClick: (String, Boolean) -> Unit,
+    onLongPress: (MarkdownFileMeta) -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp,
+    onListScroll: () -> Unit,
+    scrollToTopSignal: Int = 0
+) {
+    val gridState = rememberLazyStaggeredGridState()
+    var lastScrollOffset by remember { mutableStateOf(0) }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemScrollOffset }
+            .collect { offset ->
+                if (offset != lastScrollOffset && offset > 10) {
+                    onListScroll()
+                }
+                lastScrollOffset = offset
+            }
+    }
+
+    // 新笔记创建后滚动回顶部，让新卡片的插入动画出现在可视区域内
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal > 0) {
+            gridState.animateScrollToItem(0)
+        }
+    }
+
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
+        state = gridState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalItemSpacing = 9.dp
     ) {
-        FileListEmpty(
-            searchQuery = searchQuery,
-            modifier = Modifier.fillMaxSize()
-        )
+        items(
+            count = lazyPagingItems.itemCount,
+            key = lazyPagingItems.itemKey { it.uri }
+        ) { index ->
+            val file = lazyPagingItems[index]
+            if (file != null) {
+                WaterfallNoteCard(
+                    file = file,
+                    // 无图卡片按位置交替 5/6 行截断，让两列高度自然错开
+                    contentMaxLinesNoCover = if (index % 2 == 0) 5 else 6,
+                    onClick = { onFileClick(file.uri, false) },
+                    onLongClick = { onLongPress(file) },
+                    modifier = Modifier.animateItem()
+                )
+            }
+        }
+
+        when (lazyPagingItems.loadState.append) {
+            is androidx.paging.LoadState.Loading -> {
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+
+            is androidx.paging.LoadState.Error -> {
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "加载更多失败",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            else -> Unit
+        }
     }
 }

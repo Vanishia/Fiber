@@ -19,6 +19,7 @@ import com.bird.fiber.data.model.LibraryTarget
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.data.settings.SettingsDataStore
+import com.bird.fiber.ui.screens.settings.ListViewMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -98,6 +99,15 @@ class FileListViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = SettingsDataStore.DEFAULT_QUICK_SEARCH_KEYWORDS
+        )
+
+    /** 主页列表视图模式（条目/瀑布流），跟随设置实时切换 */
+    val listViewMode: StateFlow<ListViewMode> = settingsDataStore.settingsFlow
+        .map { it.listViewMode }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ListViewMode.LIST
         )
 
     init {
