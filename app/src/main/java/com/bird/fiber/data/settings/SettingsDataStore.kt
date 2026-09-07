@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 import com.bird.fiber.ui.screens.settings.DarkMode
+import com.bird.fiber.ui.screens.settings.ListViewMode
 import com.bird.fiber.ui.screens.settings.SettingsUiState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ class SettingsDataStore @Inject constructor(
         private val COLOR_SCHEME = intPreferencesKey("color_scheme")
         private val THEME_SEED_COLOR = intPreferencesKey("theme_seed_color")
         private val DARK_MODE = intPreferencesKey("dark_mode")
+        private val LIST_VIEW_MODE = intPreferencesKey("list_view_mode")
         private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
 
         /** 快捷入口默认关键词 */
@@ -61,7 +63,10 @@ class SettingsDataStore @Inject constructor(
             themeSeedColor = preferences[THEME_SEED_COLOR] ?: colorScheme.seedColor,
             darkMode = DarkMode.entries.getOrNull(
                 preferences[DARK_MODE] ?: 0
-            ) ?: DarkMode.SYSTEM
+            ) ?: DarkMode.SYSTEM,
+            listViewMode = ListViewMode.entries.getOrNull(
+                preferences[LIST_VIEW_MODE] ?: 0
+            ) ?: ListViewMode.LIST
         )
     }
 
@@ -100,6 +105,15 @@ class SettingsDataStore @Inject constructor(
     suspend fun saveDarkMode(mode: DarkMode) {
         dataStore.edit { preferences ->
             preferences[DARK_MODE] = mode.ordinal
+        }
+    }
+
+    /**
+     * 保存主页列表视图模式（条目/瀑布流）
+     */
+    suspend fun saveListViewMode(mode: ListViewMode) {
+        dataStore.edit { preferences ->
+            preferences[LIST_VIEW_MODE] = mode.ordinal
         }
     }
 

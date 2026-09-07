@@ -32,6 +32,14 @@ enum class DarkMode {
 }
 
 /**
+ * 主页列表视图模式
+ */
+enum class ListViewMode(val label: String) {
+    LIST("条目模式"),
+    GRID("瀑布流模式")
+}
+
+/**
  * 设置页面 UI 状态
  *
  * @property fontSizeLevel 字体大小级别（0-4 对应 80%, 90%, 100%, 110%, 120%）
@@ -39,13 +47,15 @@ enum class DarkMode {
  * @property colorScheme 配色方案
  * @property themeSeedColor 用于生成全局 Material 3 色板的 ARGB 种子色
  * @property darkMode 深色模式设置
+ * @property listViewMode 主页列表视图模式（条目/瀑布流）
  */
 data class SettingsUiState(
     val fontSizeLevel: Int = 2,  // 默认 100%
     val isDynamicColorEnabled: Boolean = true,
     val colorScheme: ColorSchemeType = ColorSchemeType.BLUE,
     val themeSeedColor: Int = ColorSchemeType.BLUE.seedColor,
-    val darkMode: DarkMode = DarkMode.SYSTEM
+    val darkMode: DarkMode = DarkMode.SYSTEM,
+    val listViewMode: ListViewMode = ListViewMode.LIST
 ) {
     companion object {
         val DEFAULT = SettingsUiState()

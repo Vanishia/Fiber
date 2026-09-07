@@ -139,6 +139,11 @@ fun SettingsScreen(
                 onLevelChange = viewModel::setFontSizeLevel
             )
 
+            ListViewModeSettingItem(
+                currentMode = uiState.listViewMode,
+                onModeChange = viewModel::setListViewMode
+            )
+
             SettingsGroupTitle("关于")
 
             SettingsItem(
@@ -630,6 +635,53 @@ private fun FontSizeSettingItem(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ListViewModeSettingItem(
+    currentMode: ListViewMode,
+    onModeChange: (ListViewMode) -> Unit
+) {
+    val modes = ListViewMode.entries
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "主页视图",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = currentMode.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = mode == currentMode,
+                    onClick = { onModeChange(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                    label = {
+                        Text(
+                            text = mode.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
+                )
+            }
+        }
     }
 }
 

@@ -99,4 +99,14 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.saveDarkMode(mode)
         }
     }
+
+    /**
+     * 设置主页列表视图模式（条目/瀑布流）
+     */
+    fun setListViewMode(mode: ListViewMode) {
+        _uiState.value = _uiState.value.copy(listViewMode = mode)
+        viewModelScope.launch {
+            settingsDataStore.saveListViewMode(mode)
+        }
+    }
 }
