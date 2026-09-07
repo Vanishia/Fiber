@@ -40,7 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
@@ -49,6 +52,8 @@ import com.bird.fiber.data.config.PagingConfig
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.components.DraggableScrollbar
 import com.bird.fiber.ui.components.FloatingTopAppBar
+import com.bird.fiber.ui.components.TopBarCollapseController
+import com.bird.fiber.ui.components.rememberTopBarCollapseController
 import com.bird.fiber.ui.screens.settings.ListViewMode
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
@@ -115,7 +120,10 @@ fun FileListContent(
         lazyPagingItems.itemCount > 0 &&
             lazyPagingItems.loadState.refresh is androidx.paging.LoadState.Loading
 
-    Box(modifier = modifier.fillMaxSize()) {
+    // 顶栏随列表滚动收起/展开（类似浏览器导航栏）
+    val topBarController = rememberTopBarCollapseController()
+
+    Box(modifier = modifier.fillMaxSize().nestedScroll(topBarController.nestedScrollConnection)) {
         when {
             hasRefreshError -> {
                 Box(
@@ -157,7 +165,8 @@ fun FileListContent(
                     topPadding = listTopPadding,
                     onListScroll = onListScroll,
                     scrollToTopSignal = scrollToTopSignal,
-                    viewMode = viewMode
+                    viewMode = viewMode,
+                    topBarController = topBarController
                 )
             }
         }
@@ -177,7 +186,10 @@ fun FileListContent(
             onSearchClick = onSearchClick,
             onCreateClick = onCreateClick,
             title = currentLibraryName ?: "Fiber",
-            modifier = topBarModifier.align(Alignment.TopCenter)
+            modifier = topBarModifier
+                .align(Alignment.TopCenter)
+                .onSizeChanged { topBarController.heightPx = it.height.toFloat() }
+                .graphicsLayer { translationY = topBarController.offsetPx }
         )
     }
 
@@ -290,7 +302,8 @@ private fun FileList(
     topPadding: androidx.compose.ui.unit.Dp,
     onListScroll: () -> Unit,
     scrollToTopSignal: Int = 0,
-    viewMode: ListViewMode = ListViewMode.LIST
+    viewMode: ListViewMode = ListViewMode.LIST,
+    topBarController: TopBarCollapseController
 ) {
     if (viewMode == ListViewMode.GRID) {
         WaterfallGrid(
@@ -299,7 +312,8 @@ private fun FileList(
             onLongPress = onLongPress,
             topPadding = topPadding,
             onListScroll = onListScroll,
-            scrollToTopSignal = scrollToTopSignal
+            scrollToTopSignal = scrollToTopSignal,
+            topBarController = topBarController
         )
     } else {
         EntryList(
@@ -310,7 +324,8 @@ private fun FileList(
             onLongPress = onLongPress,
             topPadding = topPadding,
             onListScroll = onListScroll,
-            scrollToTopSignal = scrollToTopSignal
+            scrollToTopSignal = scrollToTopSignal,
+            topBarController = topBarController
         )
     }
 
@@ -337,10 +352,18 @@ private fun EntryList(
     onLongPress: (MarkdownFileMeta) -> Unit,
     topPadding: androidx.compose.ui.unit.Dp,
     onListScroll: () -> Unit,
-    scrollToTopSignal: Int = 0
+    scrollToTopSignal: Int = 0,
+    topBarController: TopBarCollapseController
 ) {
     val listState = rememberLazyListState()
     var lastScrollOffset by remember { mutableStateOf(0) }
+
+    // 滚动停止后顶栏吸附到完全展开/收起
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) topBarController.settle()
+        }
+    }
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemScrollOffset }
@@ -447,10 +470,18 @@ private fun WaterfallGrid(
     onLongPress: (MarkdownFileMeta) -> Unit,
     topPadding: androidx.compose.ui.unit.Dp,
     onListScroll: () -> Unit,
-    scrollToTopSignal: Int = 0
+    scrollToTopSignal: Int = 0,
+    topBarController: TopBarCollapseController
 ) {
     val gridState = rememberLazyStaggeredGridState()
     var lastScrollOffset by remember { mutableStateOf(0) }
+
+    // 滚动停止后顶栏吸附到完全展开/收起
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) topBarController.settle()
+        }
+    }
 
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.firstVisibleItemScrollOffset }
