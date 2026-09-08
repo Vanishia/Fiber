@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 /**
  * 顶栏随列表滚动收起/展开的控制器（类似手机浏览器导航栏）
  *
- * 手指上滑浏览内容时，顶栏跟随手势向上平移收起；手指下滑时重新滑出。
+ * 手指上滑浏览内容时，顶栏以低于列表的速率向上平移（视差），
+ * 卡片从顶栏下方滑过，形成顶栏被"收起"的动画感；手指下滑时重新滑出。
  * 滚动停止后（[settle]）按当前偏移吸附到完全展开或完全收起，避免顶栏停在半隐藏状态。
  *
  * 用法：把 [nestedScrollConnection] 挂到列表容器上，顶栏通过
@@ -39,7 +40,8 @@ class TopBarCollapseController internal constructor(
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             val height = heightPx
             if (height <= 0f || available.y == 0f) return Offset.Zero
-            val target = (animatable.value + available.y).coerceIn(-height, 0f)
+            // 顶栏以一半速率跟随滚动：列表动速 > 顶栏动速，才有被收起的视差感
+            val target = (animatable.value + available.y * COLLAPSE_RATE).coerceIn(-height, 0f)
             scope.launch { animatable.snapTo(target) }
             // 不消费滚动量，列表照常滚动
             return Offset.Zero
@@ -52,6 +54,11 @@ class TopBarCollapseController internal constructor(
         if (height <= 0f) return
         val target = if (animatable.value < -height / 2f) -height else 0f
         scope.launch { animatable.animateTo(target, tween(durationMillis = 200)) }
+    }
+
+    private companion object {
+        /** 顶栏相对列表滚动的跟随速率，越小视差收起感越强 */
+        const val COLLAPSE_RATE = 0.5f
     }
 }
 
