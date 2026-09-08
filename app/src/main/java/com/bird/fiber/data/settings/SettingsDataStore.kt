@@ -39,6 +39,7 @@ class SettingsDataStore @Inject constructor(
         private val DARK_MODE = intPreferencesKey("dark_mode")
         private val LIST_VIEW_MODE = intPreferencesKey("list_view_mode")
         private val UPDATE_NOTIFICATION_ENABLED = booleanPreferencesKey("update_notification_enabled")
+        private val LINE_HEIGHT_PERCENT = intPreferencesKey("line_height_percent")
         private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
 
         /** 快捷入口默认关键词 */
@@ -68,7 +69,8 @@ class SettingsDataStore @Inject constructor(
             listViewMode = ListViewMode.entries.getOrNull(
                 preferences[LIST_VIEW_MODE] ?: 0
             ) ?: ListViewMode.LIST,
-            updateNotificationEnabled = preferences[UPDATE_NOTIFICATION_ENABLED] ?: true
+            updateNotificationEnabled = preferences[UPDATE_NOTIFICATION_ENABLED] ?: true,
+            lineHeightPercent = preferences[LINE_HEIGHT_PERCENT] ?: 100
         )
     }
 
@@ -125,6 +127,15 @@ class SettingsDataStore @Inject constructor(
     suspend fun saveUpdateNotificationEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[UPDATE_NOTIFICATION_ENABLED] = enabled
+        }
+    }
+
+    /**
+     * 保存正文行距缩放百分比（在编辑器/条目各自预设行距基础上缩放）
+     */
+    suspend fun saveLineHeightPercent(percent: Int) {
+        dataStore.edit { preferences ->
+            preferences[LINE_HEIGHT_PERCENT] = percent
         }
     }
 

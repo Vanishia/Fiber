@@ -45,6 +45,7 @@ import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -146,6 +147,11 @@ fun SettingsScreen(
             ListViewModeSettingItem(
                 currentMode = uiState.listViewMode,
                 onModeChange = viewModel::setListViewMode
+            )
+
+            LineHeightSettingItem(
+                currentPercent = uiState.lineHeightPercent,
+                onPercentChange = viewModel::setLineHeightPercent
             )
 
             SettingsItem(
@@ -702,6 +708,51 @@ private fun ListViewModeSettingItem(
 /**
  * 视图模式选项：上方 UI 样式示意图，下方圆点单选按钮
  */
+/**
+ * 正文行距缩放滑条：在编辑器与主页条目各自的预设行距基础上缩放，
+ * 范围限制在 90%-130%，避免拉到失控的排版
+ */
+@Composable
+private fun LineHeightSettingItem(
+    currentPercent: Int,
+    onPercentChange: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "正文行距",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "$currentPercent%",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Slider(
+            value = currentPercent.toFloat(),
+            onValueChange = { onPercentChange(it.roundToInt()) },
+            valueRange = SettingsUiState.LINE_HEIGHT_MIN_PERCENT.toFloat()..
+                SettingsUiState.LINE_HEIGHT_MAX_PERCENT.toFloat(),
+            steps = (SettingsUiState.LINE_HEIGHT_MAX_PERCENT -
+                SettingsUiState.LINE_HEIGHT_MIN_PERCENT) /
+                SettingsUiState.LINE_HEIGHT_STEP_PERCENT - 1
+        )
+
+        Text(
+            text = "影响编辑器和主页条目，不影响瀑布流卡片",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 @Composable
 private fun ViewModeOption(
     label: String,

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.doOnPreDraw
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.ui.theme.LocalLineHeightScale
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.image.AsyncDrawableScheduler
 import kotlin.math.roundToInt
@@ -72,8 +73,11 @@ private fun MarkdownPreview(
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
     val backgroundColor = LocalFiberSurfaceColors.current.pageBackground.toArgb()
     val textSizePx = with(density) { bodyStyle.fontSize.toPx() }
-    // 与编辑视图一致：精确行高 = 字号 × 共用倍数
-    val lineHeightPx = with(density) { (bodyStyle.fontSize * BODY_LINE_HEIGHT_MULTIPLIER).toPx().roundToInt() }
+    // 与编辑视图一致：精确行高 = 字号 × 共用倍数，再叠加设置里的行距缩放
+    val lineHeightScale = LocalLineHeightScale.current
+    val lineHeightPx = with(density) {
+        (bodyStyle.fontSize * BODY_LINE_HEIGHT_MULTIPLIER * lineHeightScale).toPx().roundToInt()
+    }
     val topInsetPx = with(density) { topContentInset.roundToPx() }
     val bottomInsetPx = with(density) { (bottomContentInset + 12.dp).roundToPx() }
 

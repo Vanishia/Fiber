@@ -119,7 +119,8 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 dynamicColor = settingsUiState.isDynamicColorEnabled,
                 seedColor = settingsUiState.themeSeedColor,
-                fontSizeScale = fontSizeScale
+                fontSizeScale = fontSizeScale,
+                lineHeightScale = settingsUiState.lineHeightPercent / 100f
             ) {
                 val navController = rememberNavController()
 

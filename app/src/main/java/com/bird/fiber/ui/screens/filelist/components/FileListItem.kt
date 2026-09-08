@@ -39,6 +39,7 @@ import com.bird.fiber.utils.FileUtils
 import com.bird.fiber.utils.UriHelper
 import com.bird.fiber.utils.isQuickNoteFileName
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.ui.theme.LocalLineHeightScale
 
 /** 列表缩略图边长 */
 private val THUMBNAIL_SIZE = 56.dp
@@ -138,12 +139,18 @@ private fun FileCard(
             ) {
                 val fileNameWithoutExt = file.name.removeSuffix(".md")
                 val isQuickNote = isQuickNoteFileName(fileNameWithoutExt)
+                // 在 typography 预设行高基础上叠加设置里的行距缩放
+                val lineHeightScale = LocalLineHeightScale.current
+                val bodyStyle = MaterialTheme.typography.bodyMedium
 
                 // 标题（如果不是快速笔记则显示）
                 if (!isQuickNote) {
                     Text(
                         text = fileNameWithoutExt,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        style = bodyStyle.copy(
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = bodyStyle.lineHeight * lineHeightScale
+                        ),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.primary
@@ -157,7 +164,7 @@ private fun FileCard(
                     }
                     Text(
                         text = displayPreview,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = bodyStyle.copy(lineHeight = bodyStyle.lineHeight * lineHeightScale),
                         maxLines = PreviewConfig.MAX_LINES,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface

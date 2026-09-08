@@ -49,6 +49,7 @@ enum class ListViewMode(val label: String) {
  * @property darkMode 深色模式设置
  * @property listViewMode 主页列表视图模式（条目/瀑布流）
  * @property updateNotificationEnabled 检测到新版本时是否在侧边栏提示
+ * @property lineHeightPercent 正文行距缩放百分比（90-130，100 为默认）
  */
 data class SettingsUiState(
     val fontSizeLevel: Int = 2,  // 默认 100%
@@ -57,13 +58,19 @@ data class SettingsUiState(
     val themeSeedColor: Int = ColorSchemeType.BLUE.seedColor,
     val darkMode: DarkMode = DarkMode.SYSTEM,
     val listViewMode: ListViewMode = ListViewMode.LIST,
-    val updateNotificationEnabled: Boolean = true
+    val updateNotificationEnabled: Boolean = true,
+    val lineHeightPercent: Int = 100
 ) {
     companion object {
         val DEFAULT = SettingsUiState()
 
         // 字体大小级别对应的百分比
         val FONT_SIZE_PERCENTAGES = listOf(80, 90, 100, 110, 120)
+
+        // 正文行距缩放范围（百分比），限制在适度区间避免排版失控
+        const val LINE_HEIGHT_MIN_PERCENT = 90
+        const val LINE_HEIGHT_MAX_PERCENT = 130
+        const val LINE_HEIGHT_STEP_PERCENT = 10
     }
 
     /**

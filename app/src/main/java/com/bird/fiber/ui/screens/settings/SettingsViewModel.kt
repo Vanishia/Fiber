@@ -120,4 +120,14 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.saveUpdateNotificationEnabled(newValue)
         }
     }
+
+    /**
+     * 设置正文行距缩放百分比（滑条拖动时实时生效并持久化）
+     */
+    fun setLineHeightPercent(percent: Int) {
+        _uiState.value = _uiState.value.copy(lineHeightPercent = percent)
+        viewModelScope.launch {
+            settingsDataStore.saveLineHeightPercent(percent)
+        }
+    }
 }

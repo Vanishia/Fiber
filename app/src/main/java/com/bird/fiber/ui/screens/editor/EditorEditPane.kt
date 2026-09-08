@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.bird.fiber.ui.components.AssociationMenu
 import com.bird.fiber.ui.components.findAssociationTrigger
 import com.bird.fiber.ui.components.removeAssociationTrigger
+import com.bird.fiber.ui.theme.LocalLineHeightScale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -237,8 +238,9 @@ internal fun EditorEditPane(
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                // 与预览视图共用的行距倍数，保证两种模式排版一致
-                lineHeight = MaterialTheme.typography.bodyLarge.fontSize * BODY_LINE_HEIGHT_MULTIPLIER
+                // 与预览视图共用的行距倍数，再叠加上用户在设置里的行距缩放
+                lineHeight = MaterialTheme.typography.bodyLarge.fontSize *
+                    BODY_LINE_HEIGHT_MULTIPLIER * LocalLineHeightScale.current
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             onTextLayout = { layoutResult ->
