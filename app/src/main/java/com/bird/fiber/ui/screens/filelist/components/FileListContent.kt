@@ -57,6 +57,7 @@ import com.bird.fiber.ui.components.rememberTopBarCollapseController
 import com.bird.fiber.ui.screens.settings.ListViewMode
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import timber.log.Timber
+import kotlin.random.Random
 
 @Composable
 fun DeleteConfirmDialog(
@@ -504,9 +505,9 @@ private fun WaterfallGrid(
         columns = StaggeredGridCells.Fixed(2),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-        verticalItemSpacing = 9.dp
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = topPadding, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalItemSpacing = 8.dp
     ) {
         items(
             count = lazyPagingItems.itemCount,
@@ -516,8 +517,10 @@ private fun WaterfallGrid(
             if (file != null) {
                 WaterfallNoteCard(
                     file = file,
-                    // 无图卡片按位置交替 5/6 行截断，让两列高度自然错开
-                    contentMaxLinesNoCover = if (index % 2 == 0) 5 else 6,
+                    // 无图卡片随机 5/6 行截断（按 uri 记忆保持稳定），让两列高度自然错开
+                    contentMaxLinesNoCover = remember(file.uri) {
+                        if (Random.nextBoolean()) 5 else 6
+                    },
                     onClick = { onFileClick(file.uri, false) },
                     onLongClick = { onLongPress(file) },
                     modifier = Modifier.animateItem()
