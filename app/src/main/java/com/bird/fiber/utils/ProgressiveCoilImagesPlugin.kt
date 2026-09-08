@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.drawable.Animatable
@@ -23,11 +24,14 @@ import io.noties.markwon.image.DrawableUtils
 import io.noties.markwon.image.ImageSpanFactory
 import org.commonmark.node.Image
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToInt
 
 /**
  * 渐进式图片加载插件（替代 markwon image-coil）
  *
- * - 图片加载期间在图片位置显示旋转加载圈占位，不再一片空白
+ * - 图片加载期间在图片位置显示灰色 1:1 图片图标占位（呼吸动画），不再一片空白
  * - 解码尺寸限制为 [MAX_INLINE_IMAGE_PIXELS]，避免全尺寸照片拖慢渲染、撑爆内存
  *
  * 加载逻辑照搬 CoilImagesPlugin 的 CoilAsyncDrawableLoader（含同步返回竞争处理），
@@ -100,37 +104,42 @@ class ProgressiveCoilImagesPlugin private constructor(
 
         override fun placeholder(drawable: AsyncDrawable): Drawable {
             val density = appContext.resources.displayMetrics.density
-            return SpinnerDrawable(
-                diameterPx = (PLACEHOLDER_DIAMETER_DP * density).toInt(),
-                strokePx = PLACEHOLDER_STROKE_DP * density
+            return ImagePlaceholderDrawable(
+                sizePx = (PLACEHOLDER_SIZE_DP * density).toInt(),
+                cornerRadiusPx = PLACEHOLDER_CORNER_DP * density
             )
         }
 
         private companion object {
-            const val PLACEHOLDER_DIAMETER_DP = 36f
-            const val PLACEHOLDER_STROKE_DP = 3f
+            /** 邮票大小的 1:1 占位方块 */
+            const val PLACEHOLDER_SIZE_DP = 56f
+            const val PLACEHOLDER_CORNER_DP = 6f
         }
     }
 
     /**
-     * 旋转加载圈占位 drawable
+     * 图片加载占位 drawable：1:1 浅灰圆角方块，中央山形图片图标做呼吸动画
      *
-     * 首次绘制时懒启动旋转动画，按帧失效重绘；
+     * 首次绘制时懒启动动画，按帧失效重绘；
      * 回调被摘除（脱离视图或被真实图片替换）时自动停止
      */
-    private class SpinnerDrawable(
-        private val diameterPx: Int,
-        strokePx: Float
+    private class ImagePlaceholderDrawable(
+        private val sizePx: Int,
+        private val cornerRadiusPx: Float
     ) : Drawable(), Animatable {
 
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = strokePx
-            strokeCap = Paint.Cap.ROUND
-            // 中性灰，亮暗主题下都可见
-            color = Color.argb(140, 128, 128, 128)
+        private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            // 淡灰底，亮暗主题下都可见
+            color = Color.argb(32, 128, 128, 128)
         }
-        private val arcBounds = RectF()
+        private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            // 中性灰图标，透明度由呼吸动画驱动
+            color = Color.rgb(128, 128, 128)
+        }
+        private val rect = RectF()
+        private val mountainPath = Path()
         private var running = false
 
         private val frameCallback = object : Runnable {
@@ -145,19 +154,37 @@ class ProgressiveCoilImagesPlugin private constructor(
             }
         }
 
-        override fun getIntrinsicWidth(): Int = diameterPx
-        override fun getIntrinsicHeight(): Int = diameterPx
+        override fun getIntrinsicWidth(): Int = sizePx
+        override fun getIntrinsicHeight(): Int = sizePx
 
         override fun draw(canvas: Canvas) {
             // Drawable.setCallback 是 final，无法重写感知附着；改为首次绘制时懒启动
             if (!running) start()
             val b = bounds
             if (b.isEmpty) return
-            val inset = paint.strokeWidth / 2f
-            arcBounds.set(b.left + inset, b.top + inset, b.right - inset, b.bottom - inset)
-            val startAngle = (SystemClock.uptimeMillis() % ROTATION_PERIOD_MS).toFloat() /
-                ROTATION_PERIOD_MS * 360f - 90f
-            canvas.drawArc(arcBounds, startAngle, SWEEP_DEGREES, false, paint)
+
+            // 呼吸动画：图标透明度在 ICON_MIN_ALPHA..255 间平滑往返
+            val phase = (SystemClock.uptimeMillis() % PULSE_PERIOD_MS).toFloat() / PULSE_PERIOD_MS
+            val wave = (1f - cos(phase * 2 * PI).toFloat()) / 2f
+            iconPaint.alpha = (ICON_MIN_ALPHA + (255 - ICON_MIN_ALPHA) * wave).roundToInt()
+
+            rect.set(b)
+            canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, backgroundPaint)
+
+            val w = b.width().toFloat()
+            val left = b.left.toFloat()
+            val top = b.top.toFloat()
+            // 太阳
+            canvas.drawCircle(left + w * 0.36f, top + w * 0.34f, w * 0.075f, iconPaint)
+            // 山形（两座）
+            mountainPath.reset()
+            mountainPath.moveTo(left + w * 0.20f, top + w * 0.74f)
+            mountainPath.lineTo(left + w * 0.40f, top + w * 0.50f)
+            mountainPath.lineTo(left + w * 0.52f, top + w * 0.65f)
+            mountainPath.lineTo(left + w * 0.64f, top + w * 0.50f)
+            mountainPath.lineTo(left + w * 0.80f, top + w * 0.74f)
+            mountainPath.close()
+            canvas.drawPath(mountainPath, iconPaint)
         }
 
         override fun start() {
@@ -175,11 +202,13 @@ class ProgressiveCoilImagesPlugin private constructor(
         override fun isRunning(): Boolean = running
 
         override fun setAlpha(alpha: Int) {
-            paint.alpha = alpha
+            backgroundPaint.alpha = alpha
+            iconPaint.alpha = alpha
         }
 
         override fun setColorFilter(colorFilter: ColorFilter?) {
-            paint.colorFilter = colorFilter
+            backgroundPaint.colorFilter = colorFilter
+            iconPaint.colorFilter = colorFilter
         }
 
         @Deprecated("Deprecated in Java")
@@ -187,8 +216,8 @@ class ProgressiveCoilImagesPlugin private constructor(
 
         private companion object {
             const val FRAME_MS = 16L
-            const val ROTATION_PERIOD_MS = 1200L
-            const val SWEEP_DEGREES = 270f
+            const val PULSE_PERIOD_MS = 1600L
+            const val ICON_MIN_ALPHA = 90
         }
     }
 }
