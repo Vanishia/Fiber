@@ -5,11 +5,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.settings.SettingsDataStore
+import com.bird.fiber.data.update.AppUpdateInfo
+import com.bird.fiber.data.update.UpdateChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -19,18 +26,44 @@ import javax.inject.Inject
  *
  * 管理笔记库列表和切换逻辑
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SidebarViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
+    private val settingsDataStore: SettingsDataStore,
+    private val updateChecker: UpdateChecker,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SidebarUiState())
     val uiState: StateFlow<SidebarUiState> = _uiState.asStateFlow()
 
+    /** 可用更新信息；null 表示已是最新、检查失败或用户关闭了更新通知 */
+    private val _updateInfo = MutableStateFlow<AppUpdateInfo?>(null)
+    val updateInfo: StateFlow<AppUpdateInfo?> = _updateInfo.asStateFlow()
+
     init {
         loadLibraries()
         observeActiveLibrary()
+        observeUpdateNotificationSetting()
+    }
+
+    /**
+     * 跟随"显示更新通知"开关：开启时检查一次新版本，关闭时立即清除提示
+     */
+    private fun observeUpdateNotificationSetting() {
+        viewModelScope.launch {
+            settingsDataStore.settingsFlow
+                .map { it.updateNotificationEnabled }
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _updateInfo.value = if (enabled) {
+                        updateChecker.checkForUpdate()
+                    } else {
+                        null
+                    }
+                }
+        }
     }
 
     /**

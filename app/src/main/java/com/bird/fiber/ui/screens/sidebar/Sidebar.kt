@@ -1,5 +1,7 @@
 package com.bird.fiber.ui.screens.sidebar
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,15 +14,18 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.data.local.library.LibraryEntity
+import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.ui.screens.sidebar.heatmap.NoteHeatmapSection
 import java.time.LocalDate
 
@@ -76,6 +81,8 @@ fun SidebarContent(
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    var updateDialogInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -114,6 +121,14 @@ fun SidebarContent(
         // 全部笔记入口
         AllNotesListItem(onClick = onAllNotesClick)
 
+        // 有新版本时显示更新提示块（跟随"显示更新通知"开关）
+        updateInfo?.let { update ->
+            UpdateBanner(
+                versionName = update.versionName,
+                onClick = { updateDialogInfo = update }
+            )
+        }
+
         // 底部操作区
         Column(
             modifier = Modifier
@@ -135,6 +150,98 @@ fun SidebarContent(
             }
         }
     }
+
+    // 更新详情对话框：release 说明 + 下载按钮
+    updateDialogInfo?.let { update ->
+        UpdateDialog(update = update, onDismiss = { updateDialogInfo = null })
+    }
+}
+
+/**
+ * 新版本提示块：比笔记卡片更深的主题色块（primaryContainer），点击弹出更新详情
+ */
+@Composable
+private fun UpdateBanner(
+    versionName: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.SystemUpdate,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "有新版本 v$versionName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "点击查看更新内容",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 更新详情对话框：展示 release 说明，点击"下载"打开 APK 附件地址
+ * （没有 APK 附件时退回到 release 网页）
+ */
+@Composable
+private fun UpdateDialog(
+    update: AppUpdateInfo,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("有新版本 v${update.versionName}") },
+        text = {
+            Text(
+                text = update.releaseNotes.ifBlank { "暂无更新说明" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val url = update.downloadUrl ?: update.releasePageUrl
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                    onDismiss()
+                }
+            ) {
+                Text("下载")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 @Composable
