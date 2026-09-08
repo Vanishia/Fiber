@@ -1,6 +1,8 @@
 package com.bird.fiber.ui.screens.settings
 
+import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
@@ -53,6 +56,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val dynamicColorAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val dynamicColorActive = dynamicColorAvailable && uiState.isDynamicColorEnabled
     var showCustomColorPicker by remember { mutableStateOf(false) }
@@ -161,8 +165,14 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Outlined.Info,
                 title = "关于 Fiber",
-                description = "版本 ${BuildConfig.VERSION_NAME}",
-                onClick = { }
+                description = "版本 ${BuildConfig.VERSION_NAME} · 查看项目仓库",
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Vanishia/fiber"))
+                        )
+                    }
+                }
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
