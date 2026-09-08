@@ -660,49 +660,166 @@ private fun FontSizeSettingItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ListViewModeSettingItem(
     currentMode: ListViewMode,
     onModeChange: (ListViewMode) -> Unit
 ) {
-    val modes = ListViewMode.entries
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "主页视图",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = currentMode.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        Text(
+            text = "主页视图",
+            style = MaterialTheme.typography.bodyLarge
+        )
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            modes.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    selected = mode == currentMode,
-                    onClick = { onModeChange(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                    label = {
-                        Text(
-                            text = mode.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1
-                        )
-                    }
-                )
+        Row(modifier = Modifier.fillMaxWidth()) {
+            ViewModeOption(
+                label = ListViewMode.LIST.label,
+                selected = currentMode == ListViewMode.LIST,
+                onClick = { onModeChange(ListViewMode.LIST) },
+                modifier = Modifier.weight(1f)
+            ) {
+                ListModePreview()
             }
+            Spacer(modifier = Modifier.width(16.dp))
+            ViewModeOption(
+                label = ListViewMode.GRID.label,
+                selected = currentMode == ListViewMode.GRID,
+                onClick = { onModeChange(ListViewMode.GRID) },
+                modifier = Modifier.weight(1f)
+            ) {
+                GridModePreview()
+            }
+        }
+    }
+}
+
+/**
+ * 视图模式选项：上方 UI 样式示意图，下方圆点单选按钮
+ */
+@Composable
+private fun ViewModeOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    preview: @Composable () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .padding(10.dp)
+        ) {
+            preview()
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = onClick)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+        }
+    }
+}
+
+/** 条目模式示意图：三条等宽横条 */
+@Composable
+private fun ListModePreview() {
+    val barColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        repeat(3) { index ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (index == 0) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                        } else {
+                            barColor
+                        }
+                    )
+            )
+        }
+    }
+}
+
+/** 瀑布流模式示意图：两列高低错开的方块 */
+@Composable
+private fun GridModePreview() {
+    val blockColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    val accentColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(2f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(accentColor)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(blockColor)
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(blockColor)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(2f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(blockColor)
+            )
         }
     }
 }
