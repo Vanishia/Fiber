@@ -109,4 +109,15 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.saveListViewMode(mode)
         }
     }
+
+    /**
+     * 切换更新通知开关
+     */
+    fun toggleUpdateNotification() {
+        val newValue = !_uiState.value.updateNotificationEnabled
+        _uiState.value = _uiState.value.copy(updateNotificationEnabled = newValue)
+        viewModelScope.launch {
+            settingsDataStore.saveUpdateNotificationEnabled(newValue)
+        }
+    }
 }

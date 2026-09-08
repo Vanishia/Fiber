@@ -144,6 +144,18 @@ fun SettingsScreen(
                 onModeChange = viewModel::setListViewMode
             )
 
+            SettingsItem(
+                icon = Icons.Outlined.SystemUpdate,
+                title = "显示更新通知",
+                description = "检测到新版本时在侧边栏提示",
+                onClick = viewModel::toggleUpdateNotification
+            ) {
+                Switch(
+                    checked = uiState.updateNotificationEnabled,
+                    onCheckedChange = { viewModel.toggleUpdateNotification() }
+                )
+            }
+
             SettingsGroupTitle("关于")
 
             SettingsItem(

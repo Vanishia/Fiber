@@ -38,6 +38,7 @@ class SettingsDataStore @Inject constructor(
         private val THEME_SEED_COLOR = intPreferencesKey("theme_seed_color")
         private val DARK_MODE = intPreferencesKey("dark_mode")
         private val LIST_VIEW_MODE = intPreferencesKey("list_view_mode")
+        private val UPDATE_NOTIFICATION_ENABLED = booleanPreferencesKey("update_notification_enabled")
         private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
 
         /** 快捷入口默认关键词 */
@@ -66,7 +67,8 @@ class SettingsDataStore @Inject constructor(
             ) ?: DarkMode.SYSTEM,
             listViewMode = ListViewMode.entries.getOrNull(
                 preferences[LIST_VIEW_MODE] ?: 0
-            ) ?: ListViewMode.LIST
+            ) ?: ListViewMode.LIST,
+            updateNotificationEnabled = preferences[UPDATE_NOTIFICATION_ENABLED] ?: true
         )
     }
 
@@ -114,6 +116,15 @@ class SettingsDataStore @Inject constructor(
     suspend fun saveListViewMode(mode: ListViewMode) {
         dataStore.edit { preferences ->
             preferences[LIST_VIEW_MODE] = mode.ordinal
+        }
+    }
+
+    /**
+     * 保存更新通知开关：开启时检测到新版本会在侧边栏提示
+     */
+    suspend fun saveUpdateNotificationEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[UPDATE_NOTIFICATION_ENABLED] = enabled
         }
     }
 

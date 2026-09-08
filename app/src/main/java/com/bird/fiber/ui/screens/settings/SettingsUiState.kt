@@ -48,6 +48,7 @@ enum class ListViewMode(val label: String) {
  * @property themeSeedColor 用于生成全局 Material 3 色板的 ARGB 种子色
  * @property darkMode 深色模式设置
  * @property listViewMode 主页列表视图模式（条目/瀑布流）
+ * @property updateNotificationEnabled 检测到新版本时是否在侧边栏提示
  */
 data class SettingsUiState(
     val fontSizeLevel: Int = 2,  // 默认 100%
@@ -55,7 +56,8 @@ data class SettingsUiState(
     val colorScheme: ColorSchemeType = ColorSchemeType.BLUE,
     val themeSeedColor: Int = ColorSchemeType.BLUE.seedColor,
     val darkMode: DarkMode = DarkMode.SYSTEM,
-    val listViewMode: ListViewMode = ListViewMode.LIST
+    val listViewMode: ListViewMode = ListViewMode.LIST,
+    val updateNotificationEnabled: Boolean = true
 ) {
     companion object {
         val DEFAULT = SettingsUiState()
