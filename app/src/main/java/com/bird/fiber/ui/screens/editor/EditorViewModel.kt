@@ -67,6 +67,7 @@ class EditorViewModel : ViewModel {
     private var currentFileUri: String? = null
     private var originalContent: String = ""
     private var generation = 0L
+    private var hasLoadedDocument = false
     private var renameInProgress = false
     private val session = EditorSession()
     private val pendingAttachmentUris = mutableSetOf<String>()
@@ -77,8 +78,9 @@ class EditorViewModel : ViewModel {
      * 加载文件内容
      */
     fun loadFile(fileUri: String) {
-        if (currentFileUri == fileUri && _uiState.value.error == null) return
+        if (currentFileUri == fileUri && (hasLoadedDocument || _uiState.value.isLoading)) return
         currentFileUri = fileUri
+        hasLoadedDocument = false
         val identity = ++generation
         preview.clear()
         originalContent = ""
@@ -91,6 +93,7 @@ class EditorViewModel : ViewModel {
                 .onSuccess { content ->
                     if (generation != identity || currentFileUri != fileUri) return@onSuccess
                     originalContent = content
+                    hasLoadedDocument = true
                     session.reset(TextFieldValue(content, TextRange(content.length)))
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

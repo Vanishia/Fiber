@@ -4,7 +4,6 @@ import android.content.Context
 import android.text.Spanned
 import android.widget.TextView
 import com.bird.fiber.domain.markdown.DocumentSnapshot
-import com.bird.fiber.domain.markdown.MarkdownBlock
 import com.bird.fiber.domain.markdown.ParsedDocument
 import com.bird.fiber.utils.ProgressiveCoilImagesPlugin
 import com.bird.fiber.data.repository.AttachmentRepository
@@ -48,23 +47,27 @@ class RenderMarkdownUseCase @Inject constructor(
     @Synchronized
     fun parse(document: DocumentSnapshot): ParsedDocument {
         val root = markwon.parse(document.content)
-        val blocks = generateSequence(root.firstChild) { it.next }
-            .map { MarkdownBlock(it.javaClass.simpleName) }.toList()
-        return ParsedDocument(document, blocks, root)
+        return ParsedDocument(document, root)
     }
 
     @Synchronized
     fun render(parsed: ParsedDocument): Spanned {
         val fileUri = parsed.document.fileUri
-        if (fileUri != null) {
-            parsed.root.accept(object : AbstractVisitor() {
-                override fun visit(image: Image) {
-                    image.destination = attachmentRepository.resolveUri(fileUri, image.destination) ?: image.destination
-                    super.visit(image)
-                }
-            })
+        val destinations = mutableMapOf<Image, String>()
+        return try {
+            if (fileUri != null) {
+                parsed.root.accept(object : AbstractVisitor() {
+                    override fun visit(image: Image) {
+                        destinations[image] = image.destination
+                        image.destination = attachmentRepository.resolveUri(fileUri, image.destination) ?: image.destination
+                        super.visit(image)
+                    }
+                })
+            }
+            markwon.render(parsed.root)
+        } finally {
+            destinations.forEach { (image, destination) -> image.destination = destination }
         }
-        return markwon.render(parsed.root)
     }
 
     @Synchronized

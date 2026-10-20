@@ -706,4 +706,19 @@ class EditorViewModelTest {
         advanceUntilIdle()
         coVerify(exactly = 1) { fileRepository.saveFileContent("a", raw) }
     }
+
+    @Test
+    fun saveErrorDoesNotCauseSameFileLoadToDiscardUnsavedInput() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("原文")
+        coEvery { fileRepository.saveFileContent(any(), any()) } returns FileResult.Error(FileError.Unknown("失败"))
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.onContentChange("未保存输入")
+        viewModel.saveFile()
+        advanceUntilIdle()
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        assertEquals("未保存输入", viewModel.uiState.value.content)
+        coVerify(exactly = 1) { fileRepository.readFileContent("a") }
+    }
 }

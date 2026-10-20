@@ -179,6 +179,7 @@ fun EditorScreen(
                 pendingClose = false
             },
             onSaveAndExit = {
+                pendingClose = true
                 viewModel.saveFile()
                 showUnsavedDialog = false
             },
