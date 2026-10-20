@@ -32,7 +32,7 @@ class AttachmentRepositorySafTest {
         val activeLibrary = libraryRepository.getActiveLibrary().first()
         assumeNotNull(activeLibrary)
         val target = requireNotNull(activeLibrary).toTarget()
-        val repository = AttachmentRepositoryImpl(context, libraryRepository)
+        val repository = AttachmentRepositoryImpl(context, libraryRepository, database.markdownFileDao())
 
         var sourceUri: Uri? = null
         val createdAttachments = mutableListOf<Attachment>()

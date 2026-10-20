@@ -158,8 +158,8 @@ fun NoteListScreen(
         modifier = modifier.fillMaxSize(),
         containerColor = LocalFiberSurfaceColors.current.pageBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when {
                 lazyPagingItems.itemCount == 0 &&
                     lazyPagingItems.loadState.refresh is LoadState.Loading -> {

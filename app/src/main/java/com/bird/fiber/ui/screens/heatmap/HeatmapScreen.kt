@@ -89,8 +89,8 @@ fun HeatmapScreen(
         modifier = modifier.fillMaxSize(),
         containerColor = LocalFiberSurfaceColors.current.pageBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
