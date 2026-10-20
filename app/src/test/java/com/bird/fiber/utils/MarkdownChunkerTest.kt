@@ -75,4 +75,12 @@ class MarkdownChunkerTest {
     private fun buildLargeContent(paragraphs: Int): String {
         return (1..paragraphs).joinToString("\n\n") { "第 $it 段，包含一些用于填充的文本内容。" }
     }
+
+    @Test
+    fun shorterFenceAndFenceWithInfo_doNotCloseLongFence() {
+        val block = "````text\n```\n\n" + "正文\n\n".repeat(100) + "````not-a-close\n\n更多\n````\n\n"
+        val chunks = MarkdownChunker.split(block + "尾部\n\n".repeat(100), 30)
+        assertTrue(chunks.first().startsWith(block))
+        assertEquals(block + "尾部\n\n".repeat(100), chunks.joinToString(""))
+    }
 }

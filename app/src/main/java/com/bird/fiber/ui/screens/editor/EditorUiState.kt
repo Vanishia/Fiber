@@ -9,6 +9,7 @@ data class EditorUiState(
     val isLoading: Boolean = true,
     val fileName: String = "",
     val textValue: TextFieldValue = TextFieldValue(),
+    val revision: Long = 0,
     val error: String? = null,
     val isAddingImage: Boolean = false,
     val isSaving: Boolean = false,

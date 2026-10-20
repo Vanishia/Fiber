@@ -534,4 +534,99 @@ class EditorViewModelTest {
         uri = "content://test/session-image.png",
         libraryTarget = LibraryTarget("library-1", "content://test/library")
     )
+
+    @Test
+    fun selectionAndCompositionOnlyChanges_doNotRenderOrAdvanceRevision() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        val revision = viewModel.uiState.value.revision
+        clearMocks(renderMarkdownUseCase)
+        viewModel.onTextValueChange(TextFieldValue("正文", TextRange(1), TextRange(0, 1)))
+        advanceUntilIdle()
+        assertEquals(revision, viewModel.uiState.value.revision)
+        assertEquals(TextRange(0, 1), viewModel.uiState.value.textValue.composition)
+        verify(exactly = 0) { renderMarkdownUseCase.render(any<String>(), any()) }
+    }
+
+    @Test
+    fun saveCapturesSnapshot_andLaterTypingRemainsUnsaved() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("初稿")
+        coEvery { fileRepository.saveFileContent("a", any()) } coAnswers {
+            kotlinx.coroutines.delay(100)
+            FileResult.Success(Unit)
+        }
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.saveFile()
+        viewModel.onContentChange("保存时继续输入")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { fileRepository.saveFileContent("a", "初稿") }
+        assertTrue(viewModel.hasUnsavedChanges())
+    }
+
+    @Test
+    fun delayedOldLoad_doesNotReplaceNewDocument() = runTest {
+        coEvery { fileRepository.readFileContent("old") } coAnswers {
+            kotlinx.coroutines.delay(100)
+            FileResult.Success("旧正文")
+        }
+        coEvery { fileRepository.readFileContent("new") } returns FileResult.Success("新正文")
+        viewModel.loadFile("old")
+        runCurrent()
+        viewModel.loadFile("new")
+        advanceUntilIdle()
+        assertEquals("新正文", viewModel.uiState.value.content)
+        assertEquals("new", viewModel.renderState.value.document?.fileUri)
+    }
+
+    @Test
+    fun failedPreview_canRetry_andEditModeReleasesResult() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
+        every { renderMarkdownUseCase.render(any<String>(), any()) } throws IllegalStateException("失败")
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        assertNotNull(viewModel.renderState.value.error)
+        every { renderMarkdownUseCase.render(any<String>(), any()) } returns mockk<Spanned>()
+        viewModel.retryPreview()
+        advanceUntilIdle()
+        assertNull(viewModel.renderState.value.error)
+        assertNotNull(viewModel.renderState.value.renderedMarkdown)
+        viewModel.togglePreviewMode()
+        assertNull(viewModel.renderState.value.renderedMarkdown)
+    }
+
+    @Test
+    fun nonCooperativeRender_switchingModeDuringRenderDoesNotPublishOldResult() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
+        every { renderMarkdownUseCase.render(any<String>(), any()) } answers {
+            viewModel.togglePreviewMode()
+            mockk<Spanned>()
+        }
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isPreviewMode)
+        assertNull(viewModel.renderState.value.renderedMarkdown)
+    }
+
+    @Test
+    fun attachmentAddedWhileSaving_remainsPendingAfterSave() = runTest {
+        val attachment = sessionAttachment()
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
+        coEvery { fileRepository.saveFileContent("a", any()) } coAnswers {
+            kotlinx.coroutines.delay(100)
+            FileResult.Success(Unit)
+        }
+        coEvery { attachmentRepository.copyImage(any(), null) } returns FileResult.Success(attachment)
+        coEvery { attachmentRepository.delete(any()) } returns FileResult.Success(Unit)
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.saveFile()
+        viewModel.addImage("image")
+        advanceUntilIdle()
+        assertTrue(viewModel.hasUnsavedChanges())
+        viewModel.discardChanges { }
+        advanceUntilIdle()
+        coVerify { attachmentRepository.delete(attachment.uri) }
+    }
 }

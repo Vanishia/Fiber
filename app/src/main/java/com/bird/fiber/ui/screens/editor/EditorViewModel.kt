@@ -12,28 +12,21 @@ import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
-import com.bird.fiber.utils.MarkdownChunker
+import com.bird.fiber.domain.markdown.DocumentSnapshot
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
 /**
  * 编辑器 ViewModel
  */
-@OptIn(kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
 class EditorViewModel : ViewModel {
 
@@ -68,49 +61,45 @@ class EditorViewModel : ViewModel {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
-    private val _renderState = MutableStateFlow(EditorRenderState())
-    val renderState: StateFlow<EditorRenderState> = _renderState.asStateFlow()
+    private val preview by lazy { PreviewCoordinator(viewModelScope, renderMarkdownUseCase, renderDispatcher) }
+    val renderState: StateFlow<EditorRenderState> get() = preview.state
 
     private var currentFileUri: String? = null
-    private var originalContent: String = ""  // 保存原始内容，用于判断是否有修改
+    private var originalContent: String = ""
+    private var generation = 0L
+    private var renameInProgress = false
     private val pendingAttachmentUris = mutableSetOf<String>()
 
-    private val renderRequests = MutableStateFlow<RenderRequest?>(null)
-
-    init {
-        viewModelScope.launch {
-            renderRequests
-                .debounce { request -> if (request == null || request.immediate) 0L else RENDER_DEBOUNCE_MS }
-                .collectLatest { request ->
-                    if (request == null) {
-                        _renderState.value = EditorRenderState()
-                    } else {
-                        performRender(request)
-                    }
-                }
-        }
-    }
+    private fun snapshot() = DocumentSnapshot(currentFileUri, generation, _uiState.value.revision, _uiState.value.content)
 
     /**
      * 加载文件内容
      */
     fun loadFile(fileUri: String) {
-        if (currentFileUri == fileUri && !_uiState.value.isLoading) return
+        if (currentFileUri == fileUri && _uiState.value.error == null) return
         currentFileUri = fileUri
+        val identity = ++generation
+        preview.clear()
+        originalContent = ""
+        pendingAttachmentUris.clear()
+        _uiState.value = EditorUiState(isPreviewMode = _uiState.value.isPreviewMode)
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             fileRepository.readFileContent(fileUri)
                 .onSuccess { content ->
+                    if (generation != identity || currentFileUri != fileUri) return@onSuccess
                     originalContent = content
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         textValue = TextFieldValue(content, TextRange(content.length)),
+                        revision = _uiState.value.revision + 1,
                         fileName = UriHelper.extractFileName(fileUri)
                     )
                     // 预览模式首帧立即渲染，编辑模式不保留渲染树
-                    requestRender(content, immediate = true)
+                    requestRender(immediate = true)
                 }
                 .onError { error ->
+                    if (generation != identity || currentFileUri != fileUri) return@onError
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = error.toUserMessage()
@@ -127,24 +116,39 @@ class EditorViewModel : ViewModel {
     }
 
     fun onTextValueChange(newValue: TextFieldValue) {
-        _uiState.value = _uiState.value.copy(textValue = newValue)
+        val changed = newValue.text != _uiState.value.content
+        _uiState.value = _uiState.value.copy(
+            textValue = newValue,
+            revision = _uiState.value.revision + if (changed) 1 else 0
+        )
         // 只有预览模式需要渲染，编辑模式不常驻完整 Spanned
-        if (_uiState.value.isPreviewMode) {
-            requestRender(newValue.text)
+        if (changed && _uiState.value.isPreviewMode) {
+            requestRender()
         }
     }
 
     fun addImage(sourceUri: String) {
         if (_uiState.value.isAddingImage) return
+        val imageSnapshot = snapshot()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
             attachmentRepository.copyImage(sourceUri)
                 .onSuccess { attachment ->
+                    if (generation != imageSnapshot.generation) {
+                        attachmentRepository.delete(attachment.uri)
+                        return@onSuccess
+                    }
+                    if (_uiState.value.revision != imageSnapshot.revision) {
+                        attachmentRepository.delete(attachment.uri)
+                        _uiState.value = _uiState.value.copy(isAddingImage = false, error = "正文已变动，请重新选择图片插入位置")
+                        return@onSuccess
+                    }
                     pendingAttachmentUris += attachment.uri
                     insertAtSelection(attachment.toMarkdown())
                     _uiState.value = _uiState.value.copy(isAddingImage = false)
                 }
                 .onError { error ->
+                    if (generation != imageSnapshot.generation) return@onError
                     _uiState.value = _uiState.value.copy(
                         isAddingImage = false,
                         error = error.toUserMessage()
@@ -156,15 +160,9 @@ class EditorViewModel : ViewModel {
     /** 在当前选区插入文本（图片 markdown），光标移到插入内容之后 */
     private fun insertAtSelection(markdown: String) {
         val current = _uiState.value.textValue
-        val start = current.selection.min.coerceIn(0, current.text.length)
-        val end = current.selection.max.coerceIn(start, current.text.length)
-        val updatedText = current.text.replaceRange(start, end, markdown)
-        _uiState.value = _uiState.value.copy(
-            textValue = TextFieldValue(updatedText, TextRange(start + markdown.length))
-        )
-        if (_uiState.value.isPreviewMode) {
-            requestRender(updatedText)
-        }
+        val start = current.selection.min
+        val end = current.selection.max
+        onTextValueChange(TextFieldValue(current.text.replaceRange(start, end, markdown), TextRange(start + markdown.length)))
     }
 
     /**
@@ -172,18 +170,22 @@ class EditorViewModel : ViewModel {
      */
     fun saveFile() {
         val uri = currentFileUri ?: return
+        if (_uiState.value.isSaving || _uiState.value.isLoading || renameInProgress) return
+        val saved = snapshot()
+        val savedAttachments = pendingAttachmentUris.toSet()
+        _uiState.value = _uiState.value.copy(isSaving = true, error = null)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true, error = null)
-            fileRepository.saveFileContent(uri, _uiState.value.content)
+            fileRepository.saveFileContent(uri, saved.content)
                 .onSuccess {
-                    // 更新原始内容为当前内容
-                    originalContent = _uiState.value.content
-                    pendingAttachmentUris.clear()
+                    if (generation != saved.generation) return@onSuccess
+                    originalContent = saved.content
+                    pendingAttachmentUris.removeAll(savedAttachments)
                     _uiState.value = _uiState.value.copy(isSaving = false)
                     // 发送文件更新事件，通知文件列表刷新
                     eventBus.emit(AppEvent.FileUpdated(uri))
                 }
                 .onError { error ->
+                    if (generation != saved.generation) return@onError
                     _uiState.value = _uiState.value.copy(
                         isSaving = false,
                         error = error.toUserMessage()
@@ -199,16 +201,24 @@ class EditorViewModel : ViewModel {
      */
     fun renameFile(newName: String, onComplete: (Boolean) -> Unit) {
         val uri = currentFileUri ?: return
+        if (_uiState.value.isSaving || renameInProgress || _uiState.value.isLoading) { onComplete(false); return }
+        val identity = generation
+        renameInProgress = true
         viewModelScope.launch {
             fileRepository.renameFile(uri, newName)
                 .onSuccess { newUri ->
+                    renameInProgress = false
+                    if (generation != identity) { onComplete(false); return@onSuccess }
                     currentFileUri = newUri
+                    preview.clear()
+                    requestRender(immediate = true)
                     _uiState.value = _uiState.value.copy(fileName = UriHelper.extractFileName(newUri))
                     // 通知文件列表刷新名称
                     eventBus.emit(AppEvent.FileUpdated(newUri))
                     onComplete(true)
                 }
                 .onError { error ->
+                    renameInProgress = false
                     Timber.e("EditorViewModel: 重命名失败 uri=$uri, error=$error")
                     onComplete(false)
                 }
@@ -232,9 +242,9 @@ class EditorViewModel : ViewModel {
     private fun setPreviewMode(isPreview: Boolean) {
         _uiState.value = _uiState.value.copy(isPreviewMode = isPreview)
         if (isPreview) {
-            requestRender(_uiState.value.content, immediate = true)
+            requestRender(immediate = true)
         } else {
-            renderRequests.value = null
+            preview.clear()
         }
     }
 
@@ -260,73 +270,13 @@ class EditorViewModel : ViewModel {
         }
     }
 
-    private fun requestRender(content: String, immediate: Boolean = false) {
-        if (!_uiState.value.isPreviewMode) return
-        renderRequests.value = RenderRequest(
-            content = content,
-            fileUri = currentFileUri,
-            immediate = immediate,
-            sequence = nextRenderSequence++
-        )
-    }
+    fun retryPreview() = requestRender(immediate = true)
 
-    private suspend fun performRender(request: RenderRequest) {
-        if (request.content.isBlank()) {
-            _renderState.value = EditorRenderState()
-            return
-        }
+    fun applyPreview(view: android.widget.TextView, text: android.text.Spanned) = renderMarkdownUseCase.apply(view, text)
 
-        _renderState.value = _renderState.value.copy(isRendering = true)
-        try {
-            val rendered = withContext(renderDispatcher) {
-                renderContent(request)
-            }
-            _renderState.value = EditorRenderState(
-                renderedMarkdown = rendered,
-                isRendering = false
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            _renderState.value = _renderState.value.copy(isRendering = false)
-        }
-    }
-
-    /**
-     * 渲染预览内容。超过阈值的超大正文按块渲染再拼接，
-     * 把单次 Markwon 解析的内存峰值摊薄，块间也让出协程避免长时间占用
-     */
-    private suspend fun renderContent(request: RenderRequest): android.text.Spanned {
-        if (request.content.length <= LARGE_RENDER_THRESHOLD_CHARS) {
-            return renderMarkdownUseCase.render(request.content, request.fileUri)
-        }
-        val chunks = MarkdownChunker.split(request.content, RENDER_CHUNK_CHARS)
-        if (chunks.size <= 1) {
-            return renderMarkdownUseCase.render(request.content, request.fileUri)
-        }
-        val parts = chunks.map { chunk ->
-            currentCoroutineContext().ensureActive()
-            renderMarkdownUseCase.render(chunk, request.fileUri)
-        }
-        return renderMarkdownUseCase.concat(parts)
-    }
-
-    private var nextRenderSequence = 0L
-
-    private data class RenderRequest(
-        val content: String,
-        val fileUri: String?,
-        val immediate: Boolean,
-        val sequence: Long
-    )
-
-    private companion object {
-        const val RENDER_DEBOUNCE_MS = 400L
-
-        /** 超过约 1MB 的正文走分块渲染 */
-        const val LARGE_RENDER_THRESHOLD_CHARS = 1_000_000
-
-        /** 分块渲染时每块的目标大小（约 250KB） */
-        const val RENDER_CHUNK_CHARS = 250_000
+    private fun requestRender(immediate: Boolean = false) {
+        if (!_uiState.value.isPreviewMode || _uiState.value.isLoading) return
+        preview.request(snapshot(), immediate)
     }
 }
+

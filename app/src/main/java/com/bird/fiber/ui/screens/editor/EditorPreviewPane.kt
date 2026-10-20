@@ -25,14 +25,15 @@ import androidx.core.view.doOnPreDraw
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import com.bird.fiber.ui.theme.LocalLineHeightScale
 import androidx.compose.ui.viewinterop.AndroidView
-import io.noties.markwon.ext.tables.TableRowSpan
-import io.noties.markwon.image.AsyncDrawableScheduler
+
+
 import kotlin.math.roundToInt
 
 @Composable
 internal fun EditorPreviewPane(
     renderedMarkdown: Spanned?,
     isRendering: Boolean,
+    applyPreview: (TextView, Spanned) -> Unit,
     topContentInset: Dp,
     bottomContentInset: Dp,
     initialScrollFraction: Float? = null,
@@ -49,6 +50,7 @@ internal fun EditorPreviewPane(
         } else {
             MarkdownPreview(
                 renderedMarkdown = renderedMarkdown,
+                applyPreview = applyPreview,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
                 initialScrollFraction = initialScrollFraction,
@@ -62,6 +64,7 @@ internal fun EditorPreviewPane(
 @Composable
 private fun MarkdownPreview(
     renderedMarkdown: Spanned?,
+    applyPreview: (TextView, Spanned) -> Unit,
     topContentInset: Dp,
     bottomContentInset: Dp,
     initialScrollFraction: Float?,
@@ -125,17 +128,17 @@ private fun MarkdownPreview(
 
             scrollView
         },
+        onRelease = { scrollView ->
+            scrollView.setOnScrollChangeListener(null)
+            NativePreviewBinding.release(scrollView.tag as TextView)
+        },
         update = { scrollView ->
             val textView = scrollView.tag as TextView
             var needsLayout = false
 
             // 内容变化时更新文本（引用相等性检查，Spanned 不可变所以安全）
             if (lastRenderedText !== renderedMarkdown) {
-                AsyncDrawableScheduler.unschedule(textView)
-                TableRowsFix.unschedule(textView)
-                textView.text = renderedMarkdown ?: ""
-                AsyncDrawableScheduler.schedule(textView)
-                TableRowsFix.schedule(textView)
+                NativePreviewBinding.apply(textView, renderedMarkdown, applyPreview)
                 lastRenderedText = renderedMarkdown
                 needsLayout = true
 
@@ -187,43 +190,4 @@ private fun MarkdownPreview(
     )
 }
 
-/**
- * markwon 表格行高修正机制的本地副本（对应 TableRowsScheduler，包私有无法直接用）
- *
- * 表格行由 TableRowSpan（ReplacementSpan）绘制，首次布局时单元格 Layout 尚未构建，
- * getSize 只能报默认行高；首次绘制算出真实行高后需要重新 setText 触发布局修正。
- * markwon 依赖 setMarkdown 流程的 beforeSetText/afterSetText 挂上这套机制，
- * 而这里是 render() + 手动 setText，钩子不会执行，表格会一直保持错误行高
- * （文字溢出格子、与下文堆叠），因此手动补齐。
- */
-private object TableRowsFix {
 
-    fun schedule(textView: TextView) {
-        val spans = extract(textView) ?: return
-        val invalidator = object : TableRowSpan.Invalidator {
-            // 与 TableRowsScheduler 一致：合并一帧内的多次 invalidate，post 一次重排
-            val relayout = Runnable {
-                if (textView.isAttachedToWindow) {
-                    textView.text = textView.text
-                }
-            }
-
-            override fun invalidate() {
-                textView.removeCallbacks(relayout)
-                textView.post(relayout)
-            }
-        }
-        spans.forEach { it.invalidator(invalidator) }
-    }
-
-    fun unschedule(textView: TextView) {
-        extract(textView)?.forEach { it.invalidator(null) }
-    }
-
-    private fun extract(textView: TextView): Array<out TableRowSpan>? {
-        val text = textView.text
-        if (text.isNullOrEmpty() || text !is Spanned) return null
-        return text.getSpans(0, text.length, TableRowSpan::class.java)
-            .takeIf { it.isNotEmpty() }
-    }
-}

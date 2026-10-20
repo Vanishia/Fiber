@@ -55,7 +55,11 @@ fun EditorScreen(
                 if (pendingClose) {
                     pendingClose = false
                     Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
-                    onClose()
+                    if (viewModel.hasUnsavedChanges()) {
+                        showUnsavedDialog = true
+                    } else {
+                        onClose()
+                    }
                 } else {
                     Toast.makeText(context, "修改已保存", Toast.LENGTH_SHORT).show()
                 }
@@ -96,6 +100,9 @@ fun EditorScreen(
                 uiState = uiState,
                 renderedMarkdown = renderState.renderedMarkdown,
                 isRendering = renderState.isRendering,
+                previewError = renderState.error,
+                onRetryPreview = viewModel::retryPreview,
+                applyPreview = viewModel::applyPreview,
                 onContentChange = viewModel::onTextValueChange,
                 onImageSelected = viewModel::addImage,
                 topContentInset = overlayTopInset,

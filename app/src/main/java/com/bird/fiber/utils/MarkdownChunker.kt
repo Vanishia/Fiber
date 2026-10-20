@@ -1,7 +1,7 @@
 package com.bird.fiber.utils
 
 /**
- * 将超大 Markdown 正文切分为可独立渲染的块。
+ * 超大 Markdown 的过渡分块策略，不能保证全局引用和嵌套结构语义。
  *
  * 只在「不处于代码块内的空行」处切分，避免把代码块、表格等跨行结构拦腰切断。
  * 找不到安全切点时会保留更大的块，不会在任意位置硬切。
@@ -14,6 +14,7 @@ object MarkdownChunker {
      * 内容不超过 [maxChunkChars] 时直接返回单块列表。
      */
     fun split(content: String, maxChunkChars: Int): List<String> {
+        require(maxChunkChars > 0)
         if (content.length <= maxChunkChars) return listOf(content)
 
         val chunks = mutableListOf<String>()
@@ -21,6 +22,7 @@ object MarkdownChunker {
         var lineStart = 0
         var lastSplitPoint = -1
         var openFence: Char? = null
+        var fenceLength = 0
 
         while (lineStart < content.length) {
             val newlineIndex = content.indexOf('\n', lineStart)
@@ -29,9 +31,14 @@ object MarkdownChunker {
             val trimmed = content.substring(lineStart, lineEnd).trim()
 
             val fenceChar = fenceMarkerOf(trimmed)
+            val markerLength = trimmed.takeWhile { it == fenceChar }.length
             when {
-                openFence == null && fenceChar != null -> openFence = fenceChar
-                openFence != null && fenceChar == openFence -> openFence = null
+                openFence == null && fenceChar != null -> {
+                    openFence = fenceChar
+                    fenceLength = markerLength
+                }
+                openFence != null && fenceChar == openFence && markerLength >= fenceLength &&
+                    trimmed.drop(markerLength).isBlank() -> openFence = null
             }
 
             if (openFence == null && trimmed.isEmpty()) {

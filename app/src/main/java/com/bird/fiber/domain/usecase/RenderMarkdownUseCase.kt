@@ -2,11 +2,19 @@ package com.bird.fiber.domain.usecase
 
 import android.content.Context
 import android.text.Spanned
-import com.bird.fiber.utils.MarkdownUtils
+import android.widget.TextView
+import com.bird.fiber.domain.markdown.DocumentSnapshot
+import com.bird.fiber.domain.markdown.MarkdownBlock
+import com.bird.fiber.domain.markdown.ParsedDocument
 import com.bird.fiber.utils.ProgressiveCoilImagesPlugin
 import com.bird.fiber.data.repository.AttachmentRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.noties.markwon.Markwon
+import io.noties.markwon.AbstractMarkwonPlugin
+import io.noties.markwon.MarkwonVisitor
+import org.commonmark.node.AbstractVisitor
+import org.commonmark.node.Image
+import org.commonmark.node.SoftLineBreak
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
@@ -21,7 +29,7 @@ class RenderMarkdownUseCase @Inject constructor(
 ) {
     private val appContext = context.applicationContext
 
-    private val markwon: Markwon by lazy(LazyThreadSafetyMode.NONE) {
+    private val markwon: Markwon by lazy {
         Markwon.builder(appContext)
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(TablePlugin.create(appContext))
@@ -29,18 +37,44 @@ class RenderMarkdownUseCase @Inject constructor(
             .usePlugin(ImagesPlugin.create())
             // 渐进加载：图片未就绪时先显示文字和加载圈，且限制解码尺寸
             .usePlugin(ProgressiveCoilImagesPlugin.create(appContext))
+            .usePlugin(object : AbstractMarkwonPlugin() {
+                override fun configureVisitor(builder: MarkwonVisitor.Builder) {
+                    builder.on(SoftLineBreak::class.java) { visitor, _ -> visitor.forceNewLine() }
+                }
+            })
             .build()
     }
 
-    fun render(content: String, markdownFileUri: String? = null): Spanned {
-        val resolved = if (markdownFileUri == null) {
-            content
-        } else {
-            resolveAttachmentReferences(content, markdownFileUri)
+    @Synchronized
+    fun parse(document: DocumentSnapshot): ParsedDocument {
+        val root = markwon.parse(document.content)
+        val blocks = generateSequence(root.firstChild) { it.next }
+            .map { MarkdownBlock(it.javaClass.simpleName) }.toList()
+        return ParsedDocument(document, blocks, root)
+    }
+
+    @Synchronized
+    fun render(parsed: ParsedDocument): Spanned {
+        val fileUri = parsed.document.fileUri
+        if (fileUri != null) {
+            parsed.root.accept(object : AbstractVisitor() {
+                override fun visit(image: Image) {
+                    image.destination = attachmentRepository.resolveUri(fileUri, image.destination) ?: image.destination
+                    super.visit(image)
+                }
+            })
         }
-        val processed = MarkdownUtils.preprocessMarkdownForHardBreaks(resolved)
-        val parsed = markwon.parse(processed)
-        return markwon.render(parsed)
+        return markwon.render(parsed.root)
+    }
+
+    @Synchronized
+    fun render(content: String, markdownFileUri: String? = null): Spanned {
+        return render(parse(DocumentSnapshot(markdownFileUri, 0, 0, content)))
+    }
+
+    /** setParsedMarkdown 会调用全部插件的 beforeSetText/afterSetText，不再绕过插件。 */
+    fun apply(textView: TextView, markdown: Spanned) {
+        markwon.setParsedMarkdown(textView, markdown)
     }
 
     /**
@@ -52,17 +86,4 @@ class RenderMarkdownUseCase @Inject constructor(
         return builder
     }
 
-    private fun resolveAttachmentReferences(content: String, markdownFileUri: String): String {
-        return IMAGE_PATTERN.replace(content) { match ->
-            val alt = match.groupValues[1]
-            val destination = match.groupValues[2].ifEmpty { match.groupValues[3] }.trim()
-            val resolved = attachmentRepository.resolveUri(markdownFileUri, destination)
-                ?: return@replace match.value
-            "![$alt]($resolved)"
-        }
-    }
-
-    companion object {
-        private val IMAGE_PATTERN = Regex("""!\[([^\]]*)]\((?:<([^>]+)>|([^)]+))\)""")
-    }
 }

@@ -32,6 +32,9 @@ internal fun EditorContentHost(
     uiState: EditorUiState,
     renderedMarkdown: Spanned?,
     isRendering: Boolean,
+    previewError: String?,
+    onRetryPreview: () -> Unit,
+    applyPreview: (android.widget.TextView, Spanned) -> Unit,
     onContentChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
     onImageSelected: (String) -> Unit,
     topContentInset: Dp,
@@ -73,9 +76,19 @@ internal fun EditorContentHost(
         }
 
         uiState.isPreviewMode -> {
+            if (previewError != null) {
+                Box(modifier = contentModifier, contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(previewError, color = MaterialTheme.colorScheme.error)
+                        androidx.compose.material3.TextButton(onClick = onRetryPreview) { Text("重试") }
+                    }
+                }
+                return
+            }
             EditorPreviewPane(
                 renderedMarkdown = renderedMarkdown,
                 isRendering = isRendering,
+                applyPreview = applyPreview,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
                 initialScrollFraction = scrollFractionHolder.fraction,
