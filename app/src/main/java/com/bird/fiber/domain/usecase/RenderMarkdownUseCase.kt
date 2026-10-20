@@ -72,6 +72,9 @@ class RenderMarkdownUseCase @Inject constructor(
         return render(parse(DocumentSnapshot(markdownFileUri, 0, 0, content)))
     }
 
+    @Synchronized
+    fun render(document: DocumentSnapshot): Spanned = render(parse(document))
+
     /** setParsedMarkdown 会调用全部插件的 beforeSetText/afterSetText，不再绕过插件。 */
     fun apply(textView: TextView, markdown: Spanned) {
         markwon.setParsedMarkdown(textView, markdown)

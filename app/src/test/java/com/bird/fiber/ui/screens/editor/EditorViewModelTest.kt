@@ -53,7 +53,7 @@ class EditorViewModelTest {
         eventBus = mockk(relaxed = true)
         renderMarkdownUseCase = mockk(relaxed = true)
         attachmentRepository = mockk(relaxed = true)
-        every { renderMarkdownUseCase.render(any(), any()) } returns mockk<Spanned>(relaxed = true)
+        every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } returns mockk<Spanned>(relaxed = true)
         viewModel = EditorViewModel(
             fileRepository,
             eventBus,
@@ -142,7 +142,7 @@ class EditorViewModelTest {
         viewModel.onContentChange("编辑中的正文")
         advanceUntilIdle()
 
-        verify(exactly = 0) { renderMarkdownUseCase.render(any(), any()) }
+        verify(exactly = 0) { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) }
     }
 
     @Test
@@ -152,18 +152,18 @@ class EditorViewModelTest {
         viewModel.loadFile(fileUri)
         advanceUntilIdle()
         clearMocks(renderMarkdownUseCase)
-        every { renderMarkdownUseCase.render(any(), any()) } returns mockk<Spanned>(relaxed = true)
+        every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } returns mockk<Spanned>(relaxed = true)
 
         viewModel.onContentChange("第一版")
         advanceTimeBy(200)
         viewModel.onContentChange("最终版本")
         advanceTimeBy(399)
-        verify(exactly = 0) { renderMarkdownUseCase.render(any(), any()) }
+        verify(exactly = 0) { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) }
         advanceTimeBy(1)
         advanceUntilIdle()
 
-        verify(exactly = 1) { renderMarkdownUseCase.render("最终版本", fileUri) }
-        verify(exactly = 0) { renderMarkdownUseCase.render("第一版", fileUri) }
+        verify(exactly = 1) { renderMarkdownUseCase.render(match<com.bird.fiber.domain.markdown.DocumentSnapshot> { it.content == "最终版本" && it.fileUri == fileUri }) }
+        verify(exactly = 0) { renderMarkdownUseCase.render(match<com.bird.fiber.domain.markdown.DocumentSnapshot> { it.content == "第一版" && it.fileUri == fileUri }) }
     }
 
     @Test
@@ -508,7 +508,7 @@ class EditorViewModelTest {
         advanceUntilIdle()
 
         // Assert - 分块渲染多次，最后拼接一次
-        verify(atLeast = 2) { renderMarkdownUseCase.render(any(), any()) }
+        verify(atLeast = 2) { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) }
         verify(exactly = 1) { renderMarkdownUseCase.concat(any()) }
         assertEquals(false, viewModel.renderState.value.isRendering)
     }
@@ -524,7 +524,7 @@ class EditorViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        verify(exactly = 1) { renderMarkdownUseCase.render("普通内容", fileUri) }
+        verify(exactly = 1) { renderMarkdownUseCase.render(match<com.bird.fiber.domain.markdown.DocumentSnapshot> { it.content == "普通内容" && it.fileUri == fileUri }) }
         verify(exactly = 0) { renderMarkdownUseCase.concat(any()) }
     }
 
@@ -546,7 +546,7 @@ class EditorViewModelTest {
         advanceUntilIdle()
         assertEquals(revision, viewModel.uiState.value.revision)
         assertEquals(TextRange(0, 1), viewModel.uiState.value.textValue.composition)
-        verify(exactly = 0) { renderMarkdownUseCase.render(any<String>(), any()) }
+        verify(exactly = 0) { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) }
     }
 
     @Test
@@ -583,11 +583,11 @@ class EditorViewModelTest {
     @Test
     fun failedPreview_canRetry_andEditModeReleasesResult() = runTest {
         coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
-        every { renderMarkdownUseCase.render(any<String>(), any()) } throws IllegalStateException("失败")
+        every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } throws IllegalStateException("失败")
         viewModel.loadFile("a")
         advanceUntilIdle()
         assertNotNull(viewModel.renderState.value.error)
-        every { renderMarkdownUseCase.render(any<String>(), any()) } returns mockk<Spanned>()
+        every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } returns mockk<Spanned>()
         viewModel.retryPreview()
         advanceUntilIdle()
         assertNull(viewModel.renderState.value.error)
@@ -599,7 +599,7 @@ class EditorViewModelTest {
     @Test
     fun nonCooperativeRender_switchingModeDuringRenderDoesNotPublishOldResult() = runTest {
         coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("正文")
-        every { renderMarkdownUseCase.render(any<String>(), any()) } answers {
+        every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } answers {
             viewModel.togglePreviewMode()
             mockk<Spanned>()
         }
@@ -628,5 +628,82 @@ class EditorViewModelTest {
         viewModel.discardChanges { }
         advanceUntilIdle()
         coVerify { attachmentRepository.delete(attachment.uri) }
+    }
+
+    @Test
+    fun imagePickerUsesCapturedSelection_andImageInsertionIsOneUndoStep() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("前后")
+        coEvery { attachmentRepository.copyImage(any(), null) } returns FileResult.Success(sessionAttachment())
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.onTextValueChange(TextFieldValue("前后", TextRange(1)))
+        val insertion = viewModel.captureImageInsertion()
+        viewModel.onTextValueChange(TextFieldValue("前后", TextRange(2)))
+        viewModel.addImage("image", insertion)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.content.startsWith("前![图片]"))
+        viewModel.undo()
+        assertEquals("前后", viewModel.uiState.value.content)
+        viewModel.redo()
+        assertTrue(viewModel.uiState.value.content.startsWith("前![图片]"))
+    }
+
+    @Test
+    fun imagePickerRejectsStaleRevisionBeforeCopying() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("原文")
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        val insertion = viewModel.captureImageInsertion()
+        viewModel.onContentChange("新内容")
+        viewModel.addImage("image", insertion)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { attachmentRepository.copyImage(any(), any()) }
+        assertEquals("新内容", viewModel.uiState.value.content)
+    }
+
+    @Test
+    fun delayedImageCopyDoesNotInsertIntoNewDocument() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("原文")
+        coEvery { fileRepository.readFileContent("b") } returns FileResult.Success("新文档")
+        coEvery { attachmentRepository.copyImage(any(), null) } coAnswers {
+            kotlinx.coroutines.delay(100)
+            FileResult.Success(sessionAttachment())
+        }
+        coEvery { attachmentRepository.delete(any()) } returns FileResult.Success(Unit)
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.addImage("image")
+        runCurrent()
+        viewModel.loadFile("b")
+        advanceUntilIdle()
+        assertEquals("新文档", viewModel.uiState.value.content)
+        coVerify { attachmentRepository.delete(sessionAttachment().uri) }
+    }
+
+    @Test
+    fun renameRefreshesPreviewContext_andSaveUsesNewUri() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("![图](a.png)")
+        coEvery { fileRepository.renameFile("a", "b") } returns FileResult.Success("b")
+        coEvery { fileRepository.saveFileContent(any(), any()) } returns FileResult.Success(Unit)
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.renameFile("b") { assertTrue(it) }
+        advanceUntilIdle()
+        assertEquals("b", viewModel.renderState.value.document?.fileUri)
+        viewModel.saveFile()
+        advanceUntilIdle()
+        coVerify { fileRepository.saveFileContent("b", "![图](a.png)") }
+    }
+
+    @Test
+    fun unmodifiedSavePreservesRawMarkdownAndCrLf() = runTest {
+        val raw = "# 标题\r\n\r\n```\r\n代码  \r\n```\r\n![图](<含 空格.png>)\r\n"
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success(raw)
+        coEvery { fileRepository.saveFileContent(any(), any()) } returns FileResult.Success(Unit)
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.saveFile()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { fileRepository.saveFileContent("a", raw) }
     }
 }

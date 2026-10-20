@@ -46,7 +46,7 @@ internal class PreviewCoordinator(
                                 } else listOf(document.content)
                                 val parts = chunks.map { chunk ->
                                     currentCoroutineContext().ensureActive()
-                                    renderer.render(chunk, document.fileUri)
+                                    renderer.render(document.copy(content = chunk))
                                 }
                                 if (parts.size == 1) parts.single() else renderer.concat(parts)
                             }

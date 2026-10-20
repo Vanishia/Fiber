@@ -4,10 +4,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -27,6 +27,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
@@ -49,7 +57,13 @@ import kotlin.math.roundToInt
 internal fun EditorEditPane(
     value: TextFieldValue,
     onContentChange: (TextFieldValue) -> Unit,
-    onImageSelected: (String) -> Unit,
+    onImageSelected: (String, EditorInsertionPoint) -> Unit,
+    captureImageInsertion: () -> EditorInsertionPoint?,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onFormat: (EditorFormat) -> Unit,
     isAddingImage: Boolean,
     topContentInset: Dp,
     bottomContentInset: Dp,
@@ -85,8 +99,16 @@ internal fun EditorEditPane(
     var focusSettling by remember { mutableStateOf(false) }
     val topInsetPx = with(density) { topContentInset.toPx() }
     val cursorRevealMarginPx = with(density) { 8.dp.toPx() }
+    var imageInsertion by remember { mutableStateOf<EditorInsertionPoint?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { onImageSelected(it.toString()) }
+        val insertion = imageInsertion
+        imageInsertion = null
+        if (uri != null && insertion != null) onImageSelected(uri.toString(), insertion)
+    }
+
+    fun pickImage() {
+        imageInsertion = captureImageInsertion() ?: return
+        imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     // 光标不在可视范围时把它滚回来；光标可见时不做任何事，不与手动滚动打架
@@ -95,7 +117,7 @@ internal fun EditorEditPane(
         val layout = textLayoutResult ?: return
         val viewportHeight = scrollState.viewportSize
         if (viewportHeight <= 0) return
-        val caret = localSelection.start.coerceIn(0, currentValue.text.length)
+        val caret = localSelection.start.coerceIn(0, minOf(currentValue.text.length, layout.layoutInput.text.length))
         val rect = layout.getCursorRect(caret).translate(Offset(x = 0f, y = topInsetPx))
         val visibleTop = scrollState.value.toFloat()
         val visibleBottom = visibleTop + viewportHeight.toFloat()
@@ -208,81 +230,101 @@ internal fun EditorEditPane(
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding()
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = { newValue ->
-                // 选区先行本地同步，光标校正不等 ViewModel 回传
-                localSelection = newValue.selection
-                onContentChange(newValue)
-                associationTriggerIndex = findAssociationTrigger(newValue)
-                associationMenuExpanded = associationTriggerIndex != null
-            },
+    Column(modifier = modifier.fillMaxSize()) {
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .onFocusChanged {
-                    if (it.hasFocus && !fieldFocused) {
-                        // 记录锚点：此刻的视图位置就是用户点按时看到的位置
-                        anchorScroll = scrollState.value
-                        focusSettling = true
-                    } else if (!it.hasFocus) {
-                        focusSettling = false
-                    }
-                    fieldFocused = it.hasFocus
-                }
-                .verticalScroll(scrollState),
-            textStyle = TextStyle(
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                // 与预览视图共用的行距倍数，再叠加上用户在设置里的行距缩放
-                lineHeight = MaterialTheme.typography.bodyLarge.fontSize *
-                    BODY_LINE_HEIGHT_MULTIPLIER * LocalLineHeightScale.current
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            onTextLayout = { layoutResult ->
-                textLayoutResult = layoutResult
-                val caret = value.selection.start.coerceIn(0, value.text.length)
-                val rect = layoutResult.getCursorRect(caret)
-                cursorBounds = rect.translate(
-                    Offset(x = 0f, y = topInsetPx - scrollState.value)
-                )
-            },
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = topContentInset, bottom = bottomContentInset + 12.dp)
-                ) {
-                    innerTextField()
-                }
-            }
-        )
-
-        AssociationMenu(
-            expanded = associationMenuExpanded,
-            anchorBounds = cursorBounds,
-            onDismiss = { associationMenuExpanded = false },
-            onImageClick = {
-                associationTriggerIndex?.let { index ->
-                    onContentChange(removeAssociationTrigger(value, index))
-                }
-                associationMenuExpanded = false
-                associationTriggerIndex = null
-                imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            }
-        )
-
-        if (isAddingImage) {
-            CircularProgressIndicator(
+                .weight(1f)
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = { newValue ->
+                    // 选区先行本地同步，光标校正不等 ViewModel 回传
+                    localSelection = newValue.selection
+                    onContentChange(newValue)
+                    associationTriggerIndex = findAssociationTrigger(newValue)
+                    associationMenuExpanded = associationTriggerIndex != null
+                },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
+                    .fillMaxSize()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed)) {
+                            when (event.key) {
+                                Key.Z -> { if (event.isShiftPressed) onRedo() else onUndo(); true }
+                                Key.Y -> { onRedo(); true }
+                                else -> false
+                            }
+                        } else false
+                    }
+                    .onFocusChanged {
+                        if (it.hasFocus && !fieldFocused) {
+                            // 记录锚点：此刻的视图位置就是用户点按时看到的位置
+                            anchorScroll = scrollState.value
+                            focusSettling = true
+                        } else if (!it.hasFocus) {
+                            focusSettling = false
+                        }
+                        fieldFocused = it.hasFocus
+                    }
+                    .verticalScroll(scrollState),
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                    // 与预览视图共用的行距倍数，再叠加上用户在设置里的行距缩放
+                    lineHeight = MaterialTheme.typography.bodyLarge.fontSize *
+                        BODY_LINE_HEIGHT_MULTIPLIER * LocalLineHeightScale.current
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                onTextLayout = { layoutResult ->
+                    textLayoutResult = layoutResult
+                    val caret = value.selection.start.coerceIn(0, layoutResult.layoutInput.text.length)
+                    val rect = layoutResult.getCursorRect(caret)
+                    cursorBounds = rect.translate(
+                        Offset(x = 0f, y = topInsetPx - scrollState.value)
+                    )
+                },
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = topContentInset, bottom = bottomContentInset + 12.dp)
+                    ) {
+                        innerTextField()
+                    }
+                }
             )
+
+            AssociationMenu(
+                expanded = associationMenuExpanded,
+                anchorBounds = cursorBounds,
+                onDismiss = { associationMenuExpanded = false },
+                onImageClick = {
+                    associationTriggerIndex?.let { index ->
+                        onContentChange(removeAssociationTrigger(value, index))
+                    }
+                    associationMenuExpanded = false
+                    associationTriggerIndex = null
+                    pickImage()
+                }
+            )
+
+            if (isAddingImage) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                )
+            }
         }
+        EditorToolbar(
+            canUndo = canUndo,
+            canRedo = canRedo,
+            enabled = value.composition == null,
+            canAddImage = !isAddingImage,
+            onUndo = onUndo,
+            onRedo = onRedo,
+            onFormat = onFormat,
+            onImage = ::pickImage
+        )
     }
 }
 

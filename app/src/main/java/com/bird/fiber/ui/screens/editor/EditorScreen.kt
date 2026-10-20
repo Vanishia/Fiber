@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.ui.theme.LocalLineHeightScale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,12 +44,25 @@ fun EditorScreen(
     val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navigationBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val overlayTopInset = statusBarTopPadding + 68.dp
+    val fontSize = MaterialTheme.typography.bodyLarge.fontSize
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val linkColor = MaterialTheme.colorScheme.primary
+    val lineHeightScale = LocalLineHeightScale.current
+
+    // TableRowSpan 按宽度缓存单元格布局；字号/颜色改变时需要新 span，不能只改 TextView。
+    LaunchedEffect(fontSize, textColor, linkColor, lineHeightScale) {
+        viewModel.retryPreview()
+    }
 
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var pendingClose by remember { mutableStateOf(false) }
     var wasSaving by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameName by remember { mutableStateOf("") }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
 
     LaunchedEffect(uiState.isSaving) {
         if (wasSaving && !uiState.isSaving) {
@@ -105,6 +120,10 @@ fun EditorScreen(
                 applyPreview = viewModel::applyPreview,
                 onContentChange = viewModel::onTextValueChange,
                 onImageSelected = viewModel::addImage,
+                captureImageInsertion = viewModel::captureImageInsertion,
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+                onFormat = viewModel::applyFormat,
                 topContentInset = overlayTopInset,
                 bottomContentInset = navigationBarBottomPadding,
                 modifier = Modifier.fillMaxSize()

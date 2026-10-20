@@ -68,6 +68,7 @@ class EditorViewModel : ViewModel {
     private var originalContent: String = ""
     private var generation = 0L
     private var renameInProgress = false
+    private val session = EditorSession()
     private val pendingAttachmentUris = mutableSetOf<String>()
 
     private fun snapshot() = DocumentSnapshot(currentFileUri, generation, _uiState.value.revision, _uiState.value.content)
@@ -83,16 +84,18 @@ class EditorViewModel : ViewModel {
         originalContent = ""
         pendingAttachmentUris.clear()
         _uiState.value = EditorUiState(isPreviewMode = _uiState.value.isPreviewMode)
+        session.reset(TextFieldValue())
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             fileRepository.readFileContent(fileUri)
                 .onSuccess { content ->
                     if (generation != identity || currentFileUri != fileUri) return@onSuccess
                     originalContent = content
+                    session.reset(TextFieldValue(content, TextRange(content.length)))
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        textValue = TextFieldValue(content, TextRange(content.length)),
-                        revision = _uiState.value.revision + 1,
+                        textValue = session.value,
+                        revision = session.revision,
                         fileName = UriHelper.extractFileName(fileUri)
                     )
                     // 预览模式首帧立即渲染，编辑模式不保留渲染树
@@ -116,10 +119,17 @@ class EditorViewModel : ViewModel {
     }
 
     fun onTextValueChange(newValue: TextFieldValue) {
-        val changed = newValue.text != _uiState.value.content
+        session.update(newValue)
+        publishSession()
+    }
+
+    private fun publishSession() {
+        val changed = session.value.text != _uiState.value.content
         _uiState.value = _uiState.value.copy(
-            textValue = newValue,
-            revision = _uiState.value.revision + if (changed) 1 else 0
+            textValue = session.value,
+            revision = session.revision,
+            canUndo = session.canUndo,
+            canRedo = session.canRedo
         )
         // 只有预览模式需要渲染，编辑模式不常驻完整 Spanned
         if (changed && _uiState.value.isPreviewMode) {
@@ -127,24 +137,43 @@ class EditorViewModel : ViewModel {
         }
     }
 
-    fun addImage(sourceUri: String) {
+    internal fun applyFormat(format: EditorFormat) {
+        session.perform { EditorOperations.format(it, format) }
+        publishSession()
+    }
+
+    fun undo() { session.undo(); publishSession() }
+
+    fun redo() { session.redo(); publishSession() }
+
+    fun captureImageInsertion(): EditorInsertionPoint? {
+        if (_uiState.value.textValue.composition != null) return null
+        return EditorInsertionPoint(generation, _uiState.value.revision, _uiState.value.textValue.selection)
+    }
+
+    fun addImage(sourceUri: String, insertion: EditorInsertionPoint? = captureImageInsertion()) {
         if (_uiState.value.isAddingImage) return
+        if (insertion == null || insertion.generation != generation || insertion.revision != _uiState.value.revision) {
+            _uiState.value = _uiState.value.copy(error = "正文已变动，请重新选择图片插入位置")
+            return
+        }
         val imageSnapshot = snapshot()
+        _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAddingImage = true, error = null)
             attachmentRepository.copyImage(sourceUri)
                 .onSuccess { attachment ->
                     if (generation != imageSnapshot.generation) {
                         attachmentRepository.delete(attachment.uri)
                         return@onSuccess
                     }
-                    if (_uiState.value.revision != imageSnapshot.revision) {
+                    if (_uiState.value.revision != imageSnapshot.revision || session.value.composition != null) {
                         attachmentRepository.delete(attachment.uri)
                         _uiState.value = _uiState.value.copy(isAddingImage = false, error = "正文已变动，请重新选择图片插入位置")
                         return@onSuccess
                     }
                     pendingAttachmentUris += attachment.uri
-                    insertAtSelection(attachment.toMarkdown())
+                    session.perform { EditorOperations.replace(it.copy(selection = insertion.selection), attachment.toMarkdown()) }
+                    publishSession()
                     _uiState.value = _uiState.value.copy(isAddingImage = false)
                 }
                 .onError { error ->
@@ -155,14 +184,6 @@ class EditorViewModel : ViewModel {
                     )
                 }
         }
-    }
-
-    /** 在当前选区插入文本（图片 markdown），光标移到插入内容之后 */
-    private fun insertAtSelection(markdown: String) {
-        val current = _uiState.value.textValue
-        val start = current.selection.min
-        val end = current.selection.max
-        onTextValueChange(TextFieldValue(current.text.replaceRange(start, end, markdown), TextRange(start + markdown.length)))
     }
 
     /**
@@ -279,4 +300,3 @@ class EditorViewModel : ViewModel {
         preview.request(snapshot(), immediate)
     }
 }
-

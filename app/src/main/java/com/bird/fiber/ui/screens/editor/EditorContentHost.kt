@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,7 +38,11 @@ internal fun EditorContentHost(
     onRetryPreview: () -> Unit,
     applyPreview: (android.widget.TextView, Spanned) -> Unit,
     onContentChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
-    onImageSelected: (String) -> Unit,
+    onImageSelected: (String, EditorInsertionPoint) -> Unit,
+    captureImageInsertion: () -> EditorInsertionPoint?,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onFormat: (EditorFormat) -> Unit,
     topContentInset: Dp,
     bottomContentInset: Dp,
     modifier: Modifier = Modifier
@@ -60,7 +66,7 @@ internal fun EditorContentHost(
             }
         }
 
-        uiState.error != null -> {
+        uiState.error != null && uiState.fileName.isBlank() -> {
             Box(
                 modifier = modifier
                     .fillMaxSize(),
@@ -102,12 +108,18 @@ internal fun EditorContentHost(
                 value = uiState.textValue,
                 onContentChange = onContentChange,
                 onImageSelected = onImageSelected,
+                captureImageInsertion = captureImageInsertion,
+                canUndo = uiState.canUndo,
+                canRedo = uiState.canRedo,
+                onUndo = onUndo,
+                onRedo = onRedo,
+                onFormat = onFormat,
                 isAddingImage = uiState.isAddingImage,
                 topContentInset = topContentInset,
-                bottomContentInset = bottomContentInset,
+                bottomContentInset = 0.dp,
                 initialScrollFraction = scrollFractionHolder.fraction,
                 onScrollFractionChanged = { scrollFractionHolder.fraction = it },
-                modifier = contentModifier
+                modifier = contentModifier.imePadding().navigationBarsPadding()
             )
         }
     }
