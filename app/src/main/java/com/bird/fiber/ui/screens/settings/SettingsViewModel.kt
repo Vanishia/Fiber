@@ -101,16 +101,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * 设置主页列表视图模式（条目/瀑布流）
-     */
-    fun setListViewMode(mode: ListViewMode) {
-        _uiState.value = _uiState.value.copy(listViewMode = mode)
-        viewModelScope.launch {
-            settingsDataStore.saveListViewMode(mode)
-        }
-    }
-
-    /**
      * 切换更新通知开关
      */
     fun toggleUpdateNotification() {

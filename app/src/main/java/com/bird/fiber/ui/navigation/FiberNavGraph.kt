@@ -32,6 +32,7 @@ import com.bird.fiber.ui.screens.notelist.NoteListRouteScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
 import com.bird.fiber.ui.screens.search.SearchScreen
 import com.bird.fiber.ui.screens.settings.SettingsScreen
+import com.bird.fiber.ui.screens.settings.HomeViewSettingsScreen
 import com.bird.fiber.utils.UriHelper
 import timber.log.Timber
 
@@ -244,8 +245,13 @@ fun FiberNavGraph(
 
         composable(route = FiberRoute.SETTINGS) {
             SettingsScreen(
-                onBackClick = ::popFromUser
+                onBackClick = ::popFromUser,
+                onHomeViewSettingsClick = { navigateFromUser(FiberRoute.HOME_VIEW_SETTINGS) }
             )
+        }
+
+        composable(route = FiberRoute.HOME_VIEW_SETTINGS) {
+            HomeViewSettingsScreen(onBackClick = ::popFromUser)
         }
 
         composable(
@@ -316,6 +322,7 @@ object FiberRoute {
     const val HEATMAP = "heatmap"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+    const val HOME_VIEW_SETTINGS = "settings/home_view"
     const val ATTACHMENTS = "attachments/{libraryId}"
 
     fun editor(fileUri: String): String = editor(fileUri, editMode = false)

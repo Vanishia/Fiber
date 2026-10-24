@@ -35,8 +35,8 @@ enum class DarkMode {
  * 主页列表视图模式
  */
 enum class ListViewMode(val label: String) {
-    LIST("条目模式"),
-    GRID("瀑布流模式")
+    LIST("条目视图"),
+    GRID("瀑布流视图")
 }
 
 /**
@@ -47,7 +47,7 @@ enum class ListViewMode(val label: String) {
  * @property colorScheme 配色方案
  * @property themeSeedColor 用于生成全局 Material 3 色板的 ARGB 种子色
  * @property darkMode 深色模式设置
- * @property listViewMode 主页列表视图模式（条目/瀑布流）
+ * @property waterfallLibraryIds 使用瀑布流视图的库 ID，其余库默认使用条目视图
  * @property updateNotificationEnabled 检测到新版本时是否在侧边栏提示
  * @property lineHeightPercent 正文行距缩放百分比（90-130，100 为默认）
  */
@@ -57,10 +57,13 @@ data class SettingsUiState(
     val colorScheme: ColorSchemeType = ColorSchemeType.BLUE,
     val themeSeedColor: Int = ColorSchemeType.BLUE.seedColor,
     val darkMode: DarkMode = DarkMode.SYSTEM,
-    val listViewMode: ListViewMode = ListViewMode.LIST,
+    val waterfallLibraryIds: Set<String> = emptySet(),
     val updateNotificationEnabled: Boolean = true,
     val lineHeightPercent: Int = 100
 ) {
+    fun listViewModeForLibrary(libraryId: String?): ListViewMode =
+        if (libraryId != null && libraryId in waterfallLibraryIds) ListViewMode.GRID else ListViewMode.LIST
+
     companion object {
         val DEFAULT = SettingsUiState()
 

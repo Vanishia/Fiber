@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.bird.fiber.ui.screens.settings.ColorSchemeType
 import com.bird.fiber.ui.screens.settings.DarkMode
@@ -26,10 +27,11 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
  * 使用 DataStore 持久化保存用户设置
  */
 @Singleton
-class SettingsDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class SettingsDataStore internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
-    private val dataStore = context.dataStore
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.dataStore)
 
     companion object {
         private val FONT_SIZE_LEVEL = intPreferencesKey("font_size_level")
@@ -37,7 +39,7 @@ class SettingsDataStore @Inject constructor(
         private val COLOR_SCHEME = intPreferencesKey("color_scheme")
         private val THEME_SEED_COLOR = intPreferencesKey("theme_seed_color")
         private val DARK_MODE = intPreferencesKey("dark_mode")
-        private val LIST_VIEW_MODE = intPreferencesKey("list_view_mode")
+        private val WATERFALL_LIBRARY_IDS = stringSetPreferencesKey("waterfall_library_ids")
         private val UPDATE_NOTIFICATION_ENABLED = booleanPreferencesKey("update_notification_enabled")
         private val LINE_HEIGHT_PERCENT = intPreferencesKey("line_height_percent")
         private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
@@ -66,9 +68,7 @@ class SettingsDataStore @Inject constructor(
             darkMode = DarkMode.entries.getOrNull(
                 preferences[DARK_MODE] ?: 0
             ) ?: DarkMode.SYSTEM,
-            listViewMode = ListViewMode.entries.getOrNull(
-                preferences[LIST_VIEW_MODE] ?: 0
-            ) ?: ListViewMode.LIST,
+            waterfallLibraryIds = preferences[WATERFALL_LIBRARY_IDS] ?: emptySet(),
             updateNotificationEnabled = preferences[UPDATE_NOTIFICATION_ENABLED] ?: true,
             lineHeightPercent = preferences[LINE_HEIGHT_PERCENT] ?: 100
         )
@@ -113,11 +113,16 @@ class SettingsDataStore @Inject constructor(
     }
 
     /**
-     * 保存主页列表视图模式（条目/瀑布流）
+     * 按库保存主页视图；通过原子更新避免快速调整多个库时覆盖其他库设置。
      */
-    suspend fun saveListViewMode(mode: ListViewMode) {
+    suspend fun saveLibraryListViewMode(libraryId: String, mode: ListViewMode) {
+        require(libraryId.isNotBlank()) { "libraryId must not be blank" }
         dataStore.edit { preferences ->
-            preferences[LIST_VIEW_MODE] = mode.ordinal
+            val waterfallIds = preferences[WATERFALL_LIBRARY_IDS] ?: emptySet()
+            preferences[WATERFALL_LIBRARY_IDS] = when (mode) {
+                ListViewMode.LIST -> waterfallIds - libraryId
+                ListViewMode.GRID -> waterfallIds + libraryId
+            }
         }
     }
 

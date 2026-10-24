@@ -101,9 +101,11 @@ class FileListViewModel @Inject constructor(
             initialValue = SettingsDataStore.DEFAULT_QUICK_SEARCH_KEYWORDS
         )
 
-    /** 主页列表视图模式（条目/瀑布流），跟随设置实时切换 */
-    val listViewMode: StateFlow<ListViewMode> = settingsDataStore.settingsFlow
-        .map { it.listViewMode }
+    /** 主页视图跟随当前库及该库设置实时切换，未设置的库默认显示条目。 */
+    val listViewMode: StateFlow<ListViewMode> = combine(
+        _currentLibraryId, settingsDataStore.settingsFlow
+    ) { libraryId, settings -> settings.listViewModeForLibrary(libraryId) }
+        .distinctUntilChanged()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
