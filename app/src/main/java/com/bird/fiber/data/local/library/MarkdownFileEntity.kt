@@ -178,7 +178,9 @@ data class MarkdownImageNoteContent(
 data class MarkdownHeatmapEntry(
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "last_modified") val lastModified: Long,
-    @ColumnInfo(name = "char_count") val charCount: Int
+    @ColumnInfo(name = "char_count") val charCount: Int,
+    @ColumnInfo(name = "library_id") val libraryId: String? = null,
+    @ColumnInfo(name = "library_name") val libraryName: String? = null
 )
 
 /**

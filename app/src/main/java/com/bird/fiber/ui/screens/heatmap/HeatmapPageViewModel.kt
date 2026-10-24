@@ -4,16 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.local.library.LibraryNoteCount
 import com.bird.fiber.data.local.library.MarkdownFileDao
+import com.bird.fiber.data.local.library.MarkdownHeatmapEntry
 import com.bird.fiber.domain.heatmap.HeatmapDay
 import com.bird.fiber.domain.heatmap.HeatmapEntry
 import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
-import com.bird.fiber.utils.parseQuickNoteDate
-import com.bird.fiber.utils.parseQuickNoteHour
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -22,7 +19,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import javax.inject.Inject
@@ -50,86 +46,14 @@ class HeatmapPageViewModel @Inject constructor(
     markdownFileDao: MarkdownFileDao
 ) : ViewModel() {
 
-    private val countsFlow = markdownFileDao.observeHeatmapEntries()
-        .map { rows ->
-            NoteHeatmapAggregator.countByDate(
-                rows.map { HeatmapEntry(it.name, it.lastModified) }
-            )
-        }
-        .flowOn(Dispatchers.Default)
-
     private val filter = MutableStateFlow<HeatmapFilter>(HeatmapFilter.All)
 
-    /** 各库笔记数（热力图页"各库笔记数"横条图），按数量降序 */
-    val libraryNoteCounts: StateFlow<List<LibraryNoteCount>> = markdownFileDao.observeLibraryNoteCounts()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    /**
-     * 记录时段分布（0~6 / 6~12 / 12~18 / 18~24 四个桶）
-     *
-     * 口径与热力图一致：快速笔记按文件名时间戳，其余按最后修改时间
-     */
-    val timeOfDayCounts: StateFlow<List<Int>> = markdownFileDao.observeHeatmapEntries()
-        .map { rows ->
-            val zone = ZoneId.systemDefault()
-            val buckets = IntArray(4)
-            rows.forEach { row ->
-                val hour = parseQuickNoteHour(row.name)
-                    ?: Instant.ofEpochMilli(row.lastModified).atZone(zone).hour
-                buckets[hour / 6]++
-            }
-            buckets.toList()
-        }
-        .flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    /**
-     * 笔记数量与字数统计（热力图页右侧统计卡片）
-     *
-     * "本月"口径与热力图一致：快速笔记按文件名时间戳，其余按最后修改时间
-     */
-    val noteStats: StateFlow<NoteStats> = markdownFileDao.observeHeatmapEntries()
-        .map { rows ->
-            val zone = ZoneId.systemDefault()
-            val currentMonth = YearMonth.now(zone)
-            var totalChars = 0L
-            var monthCount = 0
-            var monthChars = 0L
-            rows.forEach { row ->
-                totalChars += row.charCount
-                val date = parseQuickNoteDate(row.name)
-                    ?: Instant.ofEpochMilli(row.lastModified).atZone(zone).toLocalDate()
-                if (YearMonth.from(date) == currentMonth) {
-                    monthCount++
-                    monthChars += row.charCount
-                }
-            }
-            NoteStats(
-                totalCount = rows.size,
-                totalChars = totalChars,
-                monthCount = monthCount,
-                monthChars = monthChars
-            )
-        }
-        .flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = NoteStats()
-        )
-
     @OptIn(ExperimentalCoroutinesApi::class)
-    val uiState: StateFlow<HeatmapPageUiState> = combine(filter, countsFlow, ::Pair)
-        .transformLatest { (currentFilter, counts) ->
-            val state = buildState(currentFilter, counts, LocalDate.now())
+    val uiState: StateFlow<HeatmapPageUiState> = combine(
+        filter, markdownFileDao.observeHeatmapEntries(), ::Pair
+    )
+        .transformLatest { (currentFilter, rows) ->
+            val state = buildState(currentFilter, rows, LocalDate.now())
             if (!hasEmitted) {
                 hasEmitted = true
                 emit(state)
@@ -155,14 +79,21 @@ class HeatmapPageViewModel @Inject constructor(
 
     private fun buildState(
         currentFilter: HeatmapFilter,
-        counts: Map<LocalDate, Int>,
+        rows: List<MarkdownHeatmapEntry>,
         today: LocalDate
     ): HeatmapPageUiState {
+        val counts = NoteHeatmapAggregator.countByDate(
+            rows.map { HeatmapEntry(it.name, it.lastModified) }
+        )
+        val statistics = aggregateHeatmapStatistics(rows, currentFilter, today)
         val yearsWithNotes = counts.keys.map { it.year }.distinct().sortedDescending()
         val monthsWithNotes = counts.keys.mapTo(hashSetOf()) { YearMonth.from(it) }
 
         val base = HeatmapPageUiState(
             filter = currentFilter,
+            timeOfDayCounts = statistics.timeOfDayCounts,
+            libraryNoteCounts = statistics.libraryNoteCounts,
+            noteStats = statistics.noteStats,
             yearsWithNotes = yearsWithNotes,
             monthsWithNotes = monthsWithNotes,
             isLoaded = true
@@ -174,7 +105,8 @@ class HeatmapPageViewModel @Inject constructor(
                     today = today,
                     weeks = NoteHeatmapAggregator.recentYearWeekCount(today)
                 ),
-                maxCount = counts.values.maxOrNull() ?: 0
+                maxCount = counts.filterKeys { it in today.minusDays(364)..today }
+                    .values.maxOrNull() ?: 0
             )
 
             is HeatmapFilter.Year -> base.copy(
@@ -205,14 +137,17 @@ data class NoteStats(
     val totalCount: Int = 0,
     /** 笔记总字数 */
     val totalChars: Long = 0,
-    /** 本月新增笔记数 */
-    val monthCount: Int = 0,
-    /** 本月新增字数 */
-    val monthChars: Long = 0
+    /** 当前视图范围内的笔记数 */
+    val periodCount: Int = 0,
+    /** 当前视图范围内的字数 */
+    val periodChars: Long = 0
 )
 
 data class HeatmapPageUiState(
     val filter: HeatmapFilter = HeatmapFilter.All,
+    val timeOfDayCounts: List<Int> = List(4) { 0 },
+    val libraryNoteCounts: List<LibraryNoteCount> = emptyList(),
+    val noteStats: NoteStats = NoteStats(),
     /** 周网格数据（全部笔记 / 整年视图），一列一周 */
     val weeks: List<List<HeatmapDay>> = emptyList(),
     /** 单月日历数据，一行一周，月外日期为 null */

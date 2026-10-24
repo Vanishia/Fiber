@@ -78,9 +78,6 @@ fun HeatmapScreen(
     viewModel: HeatmapPageViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val libraryNoteCounts by viewModel.libraryNoteCounts.collectAsStateWithLifecycle()
-    val timeOfDayCounts by viewModel.timeOfDayCounts.collectAsStateWithLifecycle()
-    val noteStats by viewModel.noteStats.collectAsStateWithLifecycle()
     var menuExpanded by remember { mutableStateOf(false) }
     var pickerMode by remember { mutableStateOf<HeatmapPickerMode?>(null) }
     val today = remember { LocalDate.now() }
@@ -157,13 +154,14 @@ fun HeatmapScreen(
                 Spacer(modifier = Modifier.height(28.dp))
 
                 TimeOfDaySection(
-                    counts = timeOfDayCounts,
-                    stats = noteStats,
+                    counts = uiState.timeOfDayCounts,
+                    stats = uiState.noteStats,
+                    filter = uiState.filter,
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
 
                 LibraryNoteCountsSection(
-                    counts = libraryNoteCounts,
+                    counts = uiState.libraryNoteCounts,
                     modifier = Modifier.padding(bottom = 28.dp)
                 )
 
@@ -428,7 +426,10 @@ private fun LibraryNoteCountsSection(
     counts: List<LibraryNoteCount>,
     modifier: Modifier = Modifier
 ) {
-    if (counts.isEmpty()) return
+    if (counts.isEmpty()) {
+        Text("当前范围暂无笔记", style = MaterialTheme.typography.bodyMedium, modifier = modifier)
+        return
+    }
     val maxCount = counts.maxOf { it.count }.coerceAtLeast(1)
 
     Column(modifier = modifier) {
@@ -485,7 +486,7 @@ private fun LibraryNoteCountsSection(
 
 /**
  * 记录时段分布：0~6 / 6~12 / 12~18 / 18~24 四个时段的甜甜圈图，
- * 右侧放"本月新增/本月字数/总字数/笔记总数"四张统计卡片，
+ * 右侧放当前期间新增/字数及全库总字数/笔记总数四张统计卡片，
  * 图例单独一行排在圆环下方，避免挤压卡片宽度；
  * 颜色统一用主题色的不同深浅
  */
@@ -494,10 +495,16 @@ private fun LibraryNoteCountsSection(
 private fun TimeOfDaySection(
     counts: List<Int>,
     stats: NoteStats,
+    filter: HeatmapFilter,
     modifier: Modifier = Modifier
 ) {
     val total = counts.sum()
-    if (counts.size != TIME_OF_DAY_LABELS.size || total == 0) return
+    if (counts.size != TIME_OF_DAY_LABELS.size) return
+    val periodLabel = when (filter) {
+        HeatmapFilter.All -> "近一年"
+        is HeatmapFilter.Year -> "所选年"
+        is HeatmapFilter.Month -> "所选月"
+    }
 
     val primary = MaterialTheme.colorScheme.primary
     val segmentColors = LEVEL_ALPHAS.map { primary.copy(alpha = it) }
@@ -515,9 +522,20 @@ private fun TimeOfDaySection(
                 val diameter = size.minDimension - strokeWidth
                 val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
                 val arcSize = Size(diameter, diameter)
+                if (total == 0) {
+                    drawArc(
+                        color = primary.copy(alpha = 0.1f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth)
+                    )
+                }
                 var startAngle = -90f
                 counts.forEachIndexed { index, count ->
-                    val sweep = 360f * count / total
+                    val sweep = if (total > 0) 360f * count / total else 0f
                     if (count > 0) {
                         drawArc(
                             color = segmentColors[index],
@@ -538,12 +556,12 @@ private fun TimeOfDaySection(
                 modifier = Modifier.weight(1f)
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard(value = stats.monthCount.toString(), label = "本月新增", modifier = Modifier.weight(1f))
-                    StatCard(value = formatCharCount(stats.monthChars), label = "本月字数", modifier = Modifier.weight(1f))
+                    StatCard(value = stats.periodCount.toString(), label = "${periodLabel}新增", modifier = Modifier.weight(1f))
+                    StatCard(value = formatCharCount(stats.periodChars), label = "${periodLabel}字数", modifier = Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatCard(value = formatCharCount(stats.totalChars), label = "总字数", modifier = Modifier.weight(1f))
-                    StatCard(value = stats.totalCount.toString(), label = "笔记总数", modifier = Modifier.weight(1f))
+                    StatCard(value = formatCharCount(stats.totalChars), label = "全库总字数", modifier = Modifier.weight(1f))
+                    StatCard(value = stats.totalCount.toString(), label = "全库笔记总数", modifier = Modifier.weight(1f))
                 }
             }
         }

@@ -297,7 +297,9 @@ interface MarkdownFileDao {
      * 返回 Flow：索引任何变化（保存/删除/同步）都会自动推送新聚合结果
      */
     @Query("""
-        SELECT name, last_modified, LENGTH(content_text) AS char_count FROM markdown_files
+        SELECT name, last_modified, LENGTH(content_text) AS char_count, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
+        FROM markdown_files
         WHERE is_deleted = 0
     """)
     fun observeHeatmapEntries(): Flow<List<MarkdownHeatmapEntry>>
