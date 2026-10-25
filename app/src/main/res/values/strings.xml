@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">fiber</string>
+    <string name="editor_toolbar_undo">撤销</string>
+    <string name="editor_toolbar_redo">重做</string>
+    <string name="editor_toolbar_heading">标题</string>
+    <string name="editor_toolbar_bold">加粗</string>
+    <string name="editor_toolbar_bullet_list">列表</string>
+    <string name="editor_toolbar_task_list">任务</string>
+    <string name="editor_toolbar_code_block">代码块</string>
+    <string name="editor_toolbar_quote">引用</string>
+    <string name="editor_toolbar_italic">斜体</string>
+    <string name="editor_toolbar_image">插入图片</string>
 </resources>

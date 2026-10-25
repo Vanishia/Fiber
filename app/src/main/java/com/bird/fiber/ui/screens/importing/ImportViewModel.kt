@@ -12,13 +12,19 @@ import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.domain.usecase.GenerateFileNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -44,12 +50,19 @@ class ImportViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** 保存失败提示 */
-    private val _saveResult = MutableSharedFlow<String>()
+    private val _saveResult = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val saveResult: SharedFlow<String> = _saveResult.asSharedFlow()
 
-    /** 保存成功事件：携带新文件 uri，由界面导航进编辑器继续编辑/改名 */
-    private val _openEditor = MutableSharedFlow<String>()
-    val openEditor: SharedFlow<String> = _openEditor.asSharedFlow()
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    /** 等待打开的文件；前台页面完成导航后确认，避免后台保存成功时丢失事件。 */
+    private val _openEditor = MutableStateFlow<String?>(null)
+    val openEditor: StateFlow<String?> = _openEditor.asStateFlow()
+
+    fun onEditorOpened(fileUri: String) {
+        _openEditor.compareAndSet(fileUri, null)
+    }
 
     /**
      * 保存待导入内容到指定库
@@ -61,39 +74,56 @@ class ImportViewModel @Inject constructor(
      */
     fun saveToLibrary(library: LibraryEntity) {
         val pending = pendingImport.value ?: return
+        // 必须在 launch 之前占用，防止同一帧连续点击创建多个文件、重复导航。
+        if (!_isSaving.compareAndSet(false, true)) return
         viewModelScope.launch {
-            try {
+            val fileUri = try {
                 if (pending.imagePath != null) {
                     saveImageToLibrary(library, pending.imagePath)
                 } else {
                     saveMarkdownToLibrary(library, pending)
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.e(e, "外部文件导入失败")
+                _saveResult.emit("保存失败")
+                null
             } finally {
-                pending.imagePath?.let { File(it).delete() }
-                importShareManager.consume()
+                try {
+                    pending.imagePath?.let { path ->
+                        withContext(NonCancellable + Dispatchers.IO) { File(path).delete() }
+                    }
+                } finally {
+                    importShareManager.consume(pending)
+                    _isSaving.value = false
+                }
             }
+            // 先关闭选库对话框、结束保存，再允许前台导航。
+            if (fileUri != null) _openEditor.value = fileUri
         }
     }
 
-    private suspend fun saveMarkdownToLibrary(library: LibraryEntity, pending: PendingImport) {
-        when (val result = fileRepository.createMarkdownFile(
+    private suspend fun saveMarkdownToLibrary(library: LibraryEntity, pending: PendingImport): String? {
+        return when (val result = fileRepository.createMarkdownFile(
             target = library.toTarget(),
             fileName = pending.fileName,
             content = pending.content
         )) {
             is FileResult.Success -> {
                 Timber.d("导入成功: ${result.data.uri} -> ${library.name}")
-                _openEditor.emit(result.data.uri)
+                result.data.uri
             }
             is FileResult.Error -> {
                 Timber.e("导入失败: ${result.error}")
                 _saveResult.emit("保存失败")
+                null
             }
-            else -> Unit
+            else -> null
         }
     }
 
-    private suspend fun saveImageToLibrary(library: LibraryEntity, imagePath: String) {
+    private suspend fun saveImageToLibrary(library: LibraryEntity, imagePath: String): String? {
         val target = library.toTarget()
         // 缓存文件是应用私有路径，无权限问题，可直接作为 copyImage 的源
         val copyResult = attachmentRepository.copyImage(
@@ -103,7 +133,7 @@ class ImportViewModel @Inject constructor(
         if (copyResult !is FileResult.Success) {
             Timber.e("图片入库失败: ${(copyResult as? FileResult.Error)?.error}")
             _saveResult.emit("保存失败")
-            return
+            return null
         }
         val attachment = copyResult.data
 
@@ -112,24 +142,29 @@ class ImportViewModel @Inject constructor(
             fileName = generateFileName(),
             content = attachment.toMarkdown() + "\n"
         )
-        when (noteResult) {
+        return when (noteResult) {
             is FileResult.Success -> {
                 Timber.d("图片笔记导入成功: ${noteResult.data.uri} -> ${library.name}")
-                _openEditor.emit(noteResult.data.uri)
+                noteResult.data.uri
             }
             is FileResult.Error -> {
                 Timber.e("图片笔记创建失败: ${noteResult.error}")
                 // 笔记没建成，删掉刚拷入的图片，避免产生孤儿附件
                 attachmentRepository.delete(attachment.uri)
                 _saveResult.emit("保存失败")
+                null
             }
-            else -> Unit
+            else -> null
         }
     }
 
     /** 放弃导入，清理缓存的临时图片 */
     fun dismiss() {
-        pendingImport.value?.imagePath?.let { File(it).delete() }
-        importShareManager.consume()
+        if (_isSaving.value) return
+        val pending = pendingImport.value ?: return
+        importShareManager.consume(pending)
+        pending.imagePath?.let { path ->
+            viewModelScope.launch(Dispatchers.IO) { File(path).delete() }
+        }
     }
 }

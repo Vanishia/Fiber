@@ -26,8 +26,8 @@ import com.bird.fiber.data.importing.ImportShareManager
 import com.bird.fiber.data.importing.PendingImport
 import com.bird.fiber.domain.sync.LibrarySyncManager
 import com.bird.fiber.ui.navigation.FiberNavGraph
-import com.bird.fiber.ui.navigation.FiberRoute
 import com.bird.fiber.ui.screens.importing.ImportLibraryDialog
+import com.bird.fiber.ui.screens.importing.ImportNavigationEffect
 import com.bird.fiber.ui.screens.importing.ImportViewModel
 import com.bird.fiber.ui.screens.settings.DarkMode
 import com.bird.fiber.ui.screens.settings.SettingsUiState
@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
                 val importViewModel: ImportViewModel = hiltViewModel()
                 val pendingImport by importViewModel.pendingImport.collectAsStateWithLifecycle()
                 val importLibraries by importViewModel.libraries.collectAsStateWithLifecycle()
+                val isImportSaving by importViewModel.isSaving.collectAsStateWithLifecycle()
                 val context = LocalContext.current
 
                 LaunchedEffect(Unit) {
@@ -143,13 +144,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // 导入保存成功后直接进入编辑器（编辑模式），方便补文本、改名
-                LaunchedEffect(Unit) {
-                    importViewModel.openEditor.collect { fileUri ->
-                        navController.navigate(FiberRoute.editor(fileUri, editMode = true)) {
-                            launchSingleTop = true
-                        }
-                    }
+                // 选库对话框退出组合后再启动导航，避免弹窗销毁与页面转场竞争。
+                if (pendingImport == null && !isImportSaving) {
+                    ImportNavigationEffect(
+                        navController = navController,
+                        pendingEditor = importViewModel.openEditor,
+                        onEditorOpened = importViewModel::onEditorOpened
+                    )
                 }
 
                 pendingImport?.let { pending ->
@@ -157,7 +158,8 @@ class MainActivity : ComponentActivity() {
                         fileName = pending.fileName,
                         libraries = importLibraries,
                         onSelect = { importViewModel.saveToLibrary(it) },
-                        onDismiss = { importViewModel.dismiss() }
+                        onDismiss = { importViewModel.dismiss() },
+                        isSaving = isImportSaving
                     )
                 }
             }
@@ -169,6 +171,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIncomingIntent(intent)
     }
 

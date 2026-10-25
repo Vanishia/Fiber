@@ -151,7 +151,7 @@ class EditorRefactorInstrumentedTest {
             session.update(TextFieldValue(value.text, TextRange(5, 1)))
             value = session.value
         }
-        compose.onNodeWithText("加粗").performClick()
+        compose.onNodeWithContentDescription("加粗").performClick()
         field.assertIsFocused()
         compose.runOnIdle {
             assertEquals("前**中文😀**后", value.text)

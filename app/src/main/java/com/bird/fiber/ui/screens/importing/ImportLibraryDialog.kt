@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,10 +42,11 @@ fun ImportLibraryDialog(
     fileName: String,
     libraries: List<LibraryEntity>,
     onSelect: (LibraryEntity) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isSaving: Boolean = false
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("保存到库") },
         text = {
             Column {
@@ -57,6 +59,15 @@ fun ImportLibraryDialog(
                 )
 
                 Spacer(modifier = Modifier.padding(top = 12.dp))
+
+                if (isSaving) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("正在保存…")
+                    }
+                    Spacer(modifier = Modifier.padding(top = 12.dp))
+                }
 
                 if (libraries.isEmpty()) {
                     Text(
@@ -74,7 +85,7 @@ fun ImportLibraryDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSelect(library) }
+                                    .clickable(enabled = !isSaving) { onSelect(library) }
                                     .padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -100,7 +111,7 @@ fun ImportLibraryDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("取消")
             }
         }
