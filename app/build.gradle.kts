@@ -25,8 +25,8 @@ android {
         applicationId = "com.bird.fiber"
         minSdk = 27
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.2.2"
+        versionCode = 9
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

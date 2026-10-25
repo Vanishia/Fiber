@@ -25,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -108,15 +107,6 @@ fun HeatmapScreen(
                             .fillMaxWidth()
                             .height(WEEKS_HEATMAP_HEIGHT_DP.dp)
                     )
-
-                    uiState.isSwitching -> Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(WEEKS_HEATMAP_HEIGHT_DP.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                    }
 
                     uiState.filter is HeatmapFilter.Month -> MonthCalendarGrid(
                         rows = uiState.monthRows,

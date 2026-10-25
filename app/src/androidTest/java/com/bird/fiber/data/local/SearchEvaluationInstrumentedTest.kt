@@ -26,7 +26,7 @@ class SearchEvaluationInstrumentedTest {
     private lateinit var databaseName: String
 
     @Before
-    fun setUp() = runBlocking {
+    fun setUp(): Unit = runBlocking {
         context = InstrumentationRegistry.getInstrumentation().targetContext
         databaseName = "search-evaluation-${System.nanoTime()}.db"
         database = Room.databaseBuilder(context, FiberDatabase::class.java, databaseName)
@@ -74,7 +74,7 @@ class SearchEvaluationInstrumentedTest {
 
     @LargeTest
     @Test
-    fun benchmarkLikeSearch_5000Files100Mb_logsP95() = runBlocking {
+    fun benchmarkLikeSearch_5000Files100Mb_logsP95(): Unit = runBlocking {
         insertBenchmarkCorpus()
         val databaseSize = database.openHelper.writableDatabase.query(
             "SELECT SUM(LENGTH(content_text)) FROM markdown_files"

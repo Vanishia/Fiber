@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 class AttachmentRepositorySafTest {
 
     @Test
-    fun copyAndDelete_usesRealSafProviderAndPreservesOriginalName() = runBlocking {
+    fun copyAndDelete_usesRealSafProviderAndPreservesOriginalName(): Unit = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver
         val database = FiberDatabase.getInstance(context)

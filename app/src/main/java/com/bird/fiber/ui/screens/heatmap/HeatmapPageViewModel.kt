@@ -11,16 +11,14 @@ import com.bird.fiber.domain.heatmap.NoteHeatmapAggregator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
 import javax.inject.Inject
 
 /** 热力图页的筛选范围 */
@@ -39,39 +37,30 @@ sealed interface HeatmapFilter {
  * 热力图页面 ViewModel
  *
  * 与侧边栏一样直接订阅笔记索引表；
- * 筛选切换时先短暂展示加载圈再出图，避免布局突变过于生硬
+ * 后台计算筛选结果，计算期间保留已有网格，完成后直接展示新结果。
  */
 @HiltViewModel
-class HeatmapPageViewModel @Inject constructor(
-    markdownFileDao: MarkdownFileDao
+class HeatmapPageViewModel internal constructor(
+    markdownFileDao: MarkdownFileDao,
+    calculationDispatcher: CoroutineDispatcher
 ) : ViewModel() {
+
+    @Inject
+    constructor(markdownFileDao: MarkdownFileDao) : this(markdownFileDao, Dispatchers.Default)
 
     private val filter = MutableStateFlow<HeatmapFilter>(HeatmapFilter.All)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<HeatmapPageUiState> = combine(
-        filter, markdownFileDao.observeHeatmapEntries(), ::Pair
-    )
-        .transformLatest { (currentFilter, rows) ->
-            val state = buildState(currentFilter, rows, LocalDate.now())
-            if (!hasEmitted) {
-                hasEmitted = true
-                emit(state)
-            } else {
-                // 切换筛选：先清空网格显示加载圈，再出结果
-                emit(state.copy(weeks = emptyList(), monthRows = emptyList(), isSwitching = true))
-                delay(SWITCH_INDICATOR_MS)
-                emit(state)
-            }
-        }
-        .flowOn(Dispatchers.Default)
+        filter, markdownFileDao.observeHeatmapEntries()
+    ) { currentFilter, rows ->
+        buildState(currentFilter, rows, LocalDate.now())
+    }
+        .flowOn(calculationDispatcher)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = HeatmapPageUiState()
         )
-
-    private var hasEmitted = false
 
     fun selectFilter(newFilter: HeatmapFilter) {
         filter.value = newFilter
@@ -126,9 +115,6 @@ class HeatmapPageViewModel @Inject constructor(
         }
     }
 
-    private companion object {
-        const val SWITCH_INDICATOR_MS = 200L
-    }
 }
 
 /** 笔记数量与字数统计（热力图页统计卡片） */
@@ -157,7 +143,5 @@ data class HeatmapPageUiState(
     val yearsWithNotes: List<Int> = emptyList(),
     /** 有笔记的月份，供月份面板置灰 */
     val monthsWithNotes: Set<YearMonth> = emptySet(),
-    val isLoaded: Boolean = false,
-    /** 筛选切换中的过渡加载态 */
-    val isSwitching: Boolean = false
+    val isLoaded: Boolean = false
 )
