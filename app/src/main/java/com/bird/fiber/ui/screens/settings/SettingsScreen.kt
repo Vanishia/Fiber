@@ -12,6 +12,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
@@ -42,11 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.BuildConfig
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.ui.theme.LocalLineHeightScale
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -146,6 +149,13 @@ fun SettingsScreen(
                 onLevelChange = viewModel::setFontSizeLevel
             )
 
+            LineHeightSettingItem(
+                currentPercent = uiState.lineHeightPercent,
+                onPercentChange = viewModel::setLineHeightPercent
+            )
+
+            TypographyPreview()
+
             SettingsItem(
                 icon = Icons.AutoMirrored.Outlined.ViewList,
                 title = "主页视图设置",
@@ -158,11 +168,6 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            LineHeightSettingItem(
-                currentPercent = uiState.lineHeightPercent,
-                onPercentChange = viewModel::setLineHeightPercent
-            )
 
             SettingsItem(
                 icon = Icons.Outlined.SystemUpdate,
@@ -302,7 +307,10 @@ private fun ThemeColorSetting(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -318,38 +326,20 @@ private fun ThemeColorSetting(
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text("主题颜色", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = if (dynamicColorActive) {
-                        "系统动态颜色正在生效"
-                    } else {
-                        "${uiState.colorScheme.label} · ${uiState.themeSeedColor.toHexColor()}"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-        Text(
-            text = "推荐颜色",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            ColorSchemeType.recommended.forEach { scheme ->
-                PresetColorButton(
-                    scheme = scheme,
-                    selected = !dynamicColorActive && uiState.colorScheme == scheme,
-                    onClick = { onSelectPreset(scheme) }
-                )
+            Text(
+                text = "主题颜色",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(modifier = Modifier.selectableGroup()) {
+                ColorSchemeType.recommended.forEach { scheme ->
+                    PresetColorButton(
+                        scheme = scheme,
+                        selected = !dynamicColorActive && uiState.colorScheme == scheme,
+                        onClick = { onSelectPreset(scheme) }
+                    )
+                }
             }
         }
 
@@ -398,23 +388,24 @@ private fun ThemeColorSetting(
 }
 
 @Composable
-private fun RowScope.PresetColorButton(
+private fun PresetColorButton(
     scheme: ColorSchemeType,
     selected: Boolean,
     onClick: () -> Unit
 ) {
     val swatch = Color(scheme.seedColor)
-    Column(
+    Box(
         modifier = Modifier
-            .weight(1f)
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .size(36.dp)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = scheme.label },
+        contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(28.dp)
                 .border(
-                    width = if (selected) 3.dp else 1.dp,
+                    width = if (selected) 2.dp else 1.dp,
                     color = if (selected) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -422,7 +413,7 @@ private fun RowScope.PresetColorButton(
                     },
                     shape = CircleShape
                 )
-                .padding(4.dp)
+                .padding(3.dp)
                 .clip(CircleShape)
                 .background(swatch),
             contentAlignment = Alignment.Center
@@ -432,21 +423,10 @@ private fun RowScope.PresetColorButton(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
                     tint = if (swatch.luminance() > 0.5f) Color.Black else Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }
-        Spacer(modifier = Modifier.height(5.dp))
-        Text(
-            text = scheme.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            maxLines = 1
-        )
     }
 }
 
@@ -614,15 +594,6 @@ private fun FontSizeSettingItem(
     onLevelChange: (Int) -> Unit
 ) {
     val levels = SettingsUiState.FONT_SIZE_PERCENTAGES
-    val poem = remember {
-        listOf(
-            "山光悦鸟性，潭影空人心。",
-            "明月松间照，清泉石上流。",
-            "行到水穷处，坐看云起时。",
-            "春风又绿江南岸，明月何时照我还。",
-            "海上生明月，天涯共此时。"
-        ).random()
-    }
 
     Column(
         modifier = Modifier
@@ -660,31 +631,20 @@ private fun FontSizeSettingItem(
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = poem,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "字体预览",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
 /**
- * 正文行距缩放滑条：在编辑器与主页条目各自的预设行距基础上缩放，
- * 范围限制在 90%-130%，避免拉到失控的排版
+ * 在编辑器与主页条目各自的预设行距基础上缩放，范围为 90%-130%。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LineHeightSettingItem(
     currentPercent: Int,
     onPercentChange: (Int) -> Unit
 ) {
+    val percentages = (SettingsUiState.LINE_HEIGHT_MIN_PERCENT..
+        SettingsUiState.LINE_HEIGHT_MAX_PERCENT step SettingsUiState.LINE_HEIGHT_STEP_PERCENT).toList()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -703,18 +663,55 @@ private fun LineHeightSettingItem(
             )
         }
 
-        Slider(
-            value = currentPercent.toFloat(),
-            onValueChange = { onPercentChange(it.roundToInt()) },
-            valueRange = SettingsUiState.LINE_HEIGHT_MIN_PERCENT.toFloat()..
-                SettingsUiState.LINE_HEIGHT_MAX_PERCENT.toFloat(),
-            steps = (SettingsUiState.LINE_HEIGHT_MAX_PERCENT -
-                SettingsUiState.LINE_HEIGHT_MIN_PERCENT) /
-                SettingsUiState.LINE_HEIGHT_STEP_PERCENT - 1
-        )
+        Spacer(modifier = Modifier.height(14.dp))
 
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            percentages.forEachIndexed { index, percent ->
+                SegmentedButton(
+                    selected = percent == currentPercent,
+                    onClick = { onPercentChange(percent) },
+                    shape = SegmentedButtonDefaults.itemShape(index, percentages.size),
+                    label = {
+                        Text(
+                            text = percent.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "影响编辑器和主页条目，不影响瀑布流卡片",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun TypographyPreview() {
+    val poem = remember {
+        listOf(
+            "山光悦鸟性，潭影空人心。",
+            "明月松间照，清泉石上流。",
+            "行到水穷处，坐看云起时。",
+            "春风又绿江南岸，明月何时照我还。",
+            "海上生明月，天涯共此时。"
+        ).random().replace("，", "，\n")
+    }
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Text(
+            text = poem,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * LocalLineHeightScale.current
+            ),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "字体与行距预览",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
