@@ -2,6 +2,7 @@ package com.bird.fiber.ui.screens.sidebar
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +33,9 @@ import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.ui.screens.sidebar.heatmap.NoteHeatmapSection
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * 侧边栏（完整版本，带背景和外层容器）
@@ -157,7 +161,11 @@ fun SidebarContent(
 
     // 更新详情对话框：release 说明 + 下载按钮
     updateDialogInfo?.let { update ->
-        UpdateDialog(update = update, onDismiss = { updateDialogInfo = null })
+        UpdateDialog(
+            update = update,
+            onDismiss = { updateDialogInfo = null },
+            onDownload = viewModel::downloadUpdate
+        )
     }
 }
 
@@ -207,45 +215,88 @@ private fun UpdateBanner(
 }
 
 /**
- * 更新详情对话框：展示 release 说明，点击"下载"打开 APK 附件地址
- * （没有 APK 附件时退回到 release 网页）
+ * 更新详情对话框：有 APK 时直接下载，没有附件时明确提供发布页入口。
  */
 @Composable
-private fun UpdateDialog(
+internal fun UpdateDialog(
     update: AppUpdateInfo,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDownload: suspend (AppUpdateInfo) -> Long
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val maxDialogHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
+    val hasApk = !update.downloadUrl.isNullOrBlank()
+    var isStartingDownload by remember(update) { mutableStateOf(false) }
+    var actionError by remember(update) { mutableStateOf<String?>(null) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isStartingDownload) onDismiss() },
         modifier = Modifier.heightIn(max = maxDialogHeight),
         title = { Text("有新版本 v${update.versionName}") },
         text = {
-            Text(
-                text = update.releaseNotes.ifBlank { "暂无更新说明" },
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = update.releaseNotes.ifBlank { "暂无更新说明" },
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                actionError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    val url = update.downloadUrl ?: update.releasePageUrl
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    if (!isStartingDownload) {
+                        isStartingDownload = true
+                        actionError = null
+                        scope.launch {
+                            try {
+                                if (hasApk) {
+                                    onDownload(update)
+                                    Toast.makeText(
+                                        context,
+                                        "已开始下载，可在通知栏查看进度",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } else {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(update.releasePageUrl))
+                                    )
+                                }
+                                onDismiss()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Timber.w(e, "启动更新下载或打开发布页失败")
+                                actionError = if (hasApk) {
+                                    "无法开始下载，请稍后重试"
+                                } else {
+                                    "无法打开发布页，请稍后重试"
+                                }
+                            } finally {
+                                isStartingDownload = false
+                            }
+                        }
                     }
-                    onDismiss()
-                }
+                },
+                enabled = !isStartingDownload
             ) {
-                Text("下载")
+                Text(if (isStartingDownload) "正在处理…" else if (hasApk) "下载" else "查看发布页")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isStartingDownload) {
                 Text("取消")
             }
         }

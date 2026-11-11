@@ -8,6 +8,7 @@ import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.settings.SettingsDataStore
 import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.data.update.UpdateChecker
+import com.bird.fiber.data.update.UpdateDownloader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,6 +33,7 @@ class SidebarViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val settingsDataStore: SettingsDataStore,
     private val updateChecker: UpdateChecker,
+    private val updateDownloader: UpdateDownloader,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -41,6 +43,8 @@ class SidebarViewModel @Inject constructor(
     /** 可用更新信息；null 表示已是最新、检查失败或用户关闭了更新通知 */
     private val _updateInfo = MutableStateFlow<AppUpdateInfo?>(null)
     val updateInfo: StateFlow<AppUpdateInfo?> = _updateInfo.asStateFlow()
+
+    suspend fun downloadUpdate(update: AppUpdateInfo): Long = updateDownloader.enqueue(update)
 
     init {
         loadLibraries()
