@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -28,9 +29,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.FileListViewModel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
@@ -54,7 +59,26 @@ internal fun SearchResultsContent(
     topPadding: Dp,
     modifier: Modifier = Modifier
 ) {
+    // 始终保存位置，加载/空结果分支也不能销毁它；NavHost 返回时可直接恢复。
+    val listState = rememberLazyListState()
+    var savedAnchorUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var savedAnchorOffset by rememberSaveable { mutableIntStateOf(0) }
+    // 只在重新进入组合后恢复，避免点击结果、尚未完成导航时提前消耗锚点。
+    var pendingAnchorUri by remember { mutableStateOf(savedAnchorUri) }
     val refreshState = lazyPagingItems.loadState.refresh
+    LaunchedEffect(pendingAnchorUri, lazyPagingItems.itemSnapshotList, refreshState) {
+        val uri = pendingAnchorUri ?: return@LaunchedEffect
+        val index = lazyPagingItems.itemSnapshotList.items.indexOfFirst { it.uri == uri }
+        if (index >= 0) {
+            // 跨库切换会让 Room 刷新分页窗口；用笔记 URI 恢复，而不是旧窗口中的下标。
+            listState.scrollToItem(index + 1, savedAnchorOffset)
+        }
+        if (index >= 0 || refreshState is LoadState.NotLoading) {
+            // 笔记若已不在结果中，保留可用位置，不把旧锚点带入后续搜索。
+            pendingAnchorUri = null
+            savedAnchorUri = null
+        }
+    }
     val hasItems = lazyPagingItems.itemCount > 0
 
     when {
@@ -91,8 +115,8 @@ internal fun SearchResultsContent(
                 ) {
                     SearchFeedbackCard(
                         icon = Icons.Default.Description,
-                        title = "没有找到相关内容",
-                        description = "试试更短的词，或者换一个描述方式。",
+                        title = if (searchQuery.isBlank()) "所选日期没有笔记" else "没有找到相关内容",
+                        description = if (searchQuery.isBlank()) "可以调整或清除日期筛选。" else "试试更短的词，或者调整日期筛选。",
                         actionText = "刷新",
                         onActionClick = { lazyPagingItems.refresh() }
                     )
@@ -102,25 +126,34 @@ internal fun SearchResultsContent(
             Box(modifier = modifier.fillMaxSize()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(start = 11.dp, end = 11.dp, top = topPadding, bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
-                    item {
+                    item(key = "search-summary") {
                         SearchSummaryCard(
-                            searchQuery = searchQuery,
+                            searchQuery = searchQuery.ifBlank { "按日期查找" },
                             resultCount = lazyPagingItems.itemCount,
                             searchSort = searchSort,
                             onSortChange = onSortChange
                         )
                     }
 
-                    items(lazyPagingItems.itemCount) { index ->
+                    items(
+                        count = lazyPagingItems.itemCount,
+                        key = lazyPagingItems.itemKey { it.uri }
+                    ) { index ->
                         val file = lazyPagingItems[index]
                         if (file != null) {
                             SearchResultItem(
                                 file = file,
                                 searchQuery = searchQuery,
                                 onClick = {
+                                    val firstResultIndex = listState.firstVisibleItemIndex - 1
+                                    savedAnchorUri = if (firstResultIndex in 0 until lazyPagingItems.itemCount) {
+                                        lazyPagingItems.peek(firstResultIndex)?.uri
+                                    } else null
+                                    savedAnchorOffset = listState.firstVisibleItemScrollOffset
                                     Timber.d("搜索页面点击文件: ${file.name}, uri: ${file.uri}")
                                     onFileClick(file)
                                 }

@@ -184,7 +184,7 @@ fun FiberNavGraph(
             NoteListRouteScreen(
                 onBackClick = ::popFromUser,
                 onFileClick = navigateToEditor,
-                onSearchClick = { navigateFromUser(FiberRoute.SEARCH) },
+                onSearchClick = { date -> navigateFromUser(FiberRoute.search(date)) },
                 onAddLibrary = onAddLibrary,
                 onSettingsClick = { navigateFromUser(FiberRoute.SETTINGS) },
                 onManageAttachments = { libraryId ->
@@ -210,7 +210,7 @@ fun FiberNavGraph(
             NoteListRouteScreen(
                 onBackClick = ::popFromUser,
                 onFileClick = navigateToEditor,
-                onSearchClick = { navigateFromUser(FiberRoute.SEARCH) },
+                onSearchClick = { date -> navigateFromUser(FiberRoute.search(date)) },
                 onAddLibrary = onAddLibrary,
                 onSettingsClick = { navigateFromUser(FiberRoute.SETTINGS) },
                 onManageAttachments = { libraryId ->
@@ -232,7 +232,14 @@ fun FiberNavGraph(
             )
         }
 
-        composable(route = FiberRoute.SEARCH) {
+        composable(
+            route = FiberRoute.SEARCH_ROUTE,
+            arguments = listOf(navArgument(FiberRoute.ARG_DATE) {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) {
             SearchScreen(
                 onBackClick = ::popFromUser,
                 onFileClick = { fileUri -> navigateToEditor(fileUri, false) },
@@ -321,6 +328,7 @@ object FiberRoute {
     const val DAY_NOTES = "day_notes/{date}"
     const val HEATMAP = "heatmap"
     const val SEARCH = "search"
+    const val SEARCH_ROUTE = "search?date={date}"
     const val SETTINGS = "settings"
     const val HOME_VIEW_SETTINGS = "settings/home_view"
     const val ATTACHMENTS = "attachments/{libraryId}"
@@ -336,6 +344,8 @@ object FiberRoute {
     fun attachments(libraryId: String): String = "attachments/${Uri.encode(libraryId)}"
 
     fun dayNotes(date: java.time.LocalDate): String = "day_notes/$date"
+
+    fun search(date: java.time.LocalDate?): String = date?.let { "search?date=$it" } ?: SEARCH
 }
 
 private const val USER_NAVIGATION_DEBOUNCE_MS = 300L

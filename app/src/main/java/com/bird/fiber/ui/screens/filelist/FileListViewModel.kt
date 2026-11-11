@@ -1,10 +1,12 @@
 package com.bird.fiber.ui.screens.filelist
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig as AndroidPagingConfig
 import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import androidx.paging.map
 import com.bird.fiber.data.config.PagingConfig
 import com.bird.fiber.data.event.AppEvent
@@ -20,6 +22,8 @@ import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.data.settings.SettingsDataStore
 import com.bird.fiber.ui.screens.settings.ListViewMode
+import com.bird.fiber.utils.ANY_QUICK_NOTE_GLOB
+import com.bird.fiber.utils.quickNoteGlobForDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +44,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
@@ -50,24 +56,37 @@ class FileListViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val previewCache: PreviewCache,
     private val fileRepository: FileRepository,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    savedStateHandle: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
 
     enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
     enum class SearchSort { RELEVANCE, RECENT_MODIFIED }
 
     /**
-     * 搜索日期条件：按笔记修改时间（last_modified）过滤结果
+     * 区间按修改时间筛选；指定某一天时沿用每日笔记的归档规则。
      *
      * fromMillis 为 null 且 toMillis 为 null 表示不限时间
      */
-    enum class SearchDatePreset { ALL_TIME, LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, CUSTOM }
+    enum class SearchDatePreset { ALL_TIME, LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, CUSTOM, DAY }
 
     data class SearchDateRange(
         val preset: SearchDatePreset = SearchDatePreset.ALL_TIME,
         val fromMillis: Long? = null,
-        val toMillis: Long? = null
-    )
+        val toMillis: Long? = null,
+        val day: LocalDate? = null
+    ) {
+        val isActive: Boolean get() = day != null || fromMillis != null || toMillis != null
+
+        companion object {
+            fun forDay(day: LocalDate, zone: ZoneId = ZoneId.systemDefault()) = SearchDateRange(
+                preset = SearchDatePreset.DAY,
+                fromMillis = day.atStartOfDay(zone).toInstant().toEpochMilli(),
+                toMillis = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                day = day
+            )
+        }
+    }
 
     private val _uiState = MutableStateFlow(FileListUiState())
     val uiState: StateFlow<FileListUiState> = _uiState.asStateFlow()
@@ -85,10 +104,18 @@ class FileListViewModel @Inject constructor(
 
     // UI 输入的搜索词，经过 300ms 防抖后写入 _currentSearchQuery
     private val _searchQueryInput = MutableStateFlow("")
-    private val _searchScope = MutableStateFlow(SearchScope.CURRENT_LIBRARY)
+    // 搜索页默认跨库查找；保存在 ViewModel 中，离开编辑器返回时继续使用原条件。
+    private val _searchScope = MutableStateFlow(SearchScope.ALL_LIBRARIES)
     private val _searchSort = MutableStateFlow(SearchSort.RELEVANCE)
-    private val _searchDateRange = MutableStateFlow(SearchDateRange())
+    private val _searchDateRange = MutableStateFlow(
+        savedStateHandle.get<String>("date")
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?.let { SearchDateRange.forDay(it) }
+            ?: SearchDateRange()
+    )
 
+    /** 搜索框当前输入值（未经过防抖），供搜索页恢复输入内容。 */
+    val searchQueryInput: StateFlow<String> = _searchQueryInput.asStateFlow()
     val searchScope: StateFlow<SearchScope> = _searchScope.asStateFlow()
     val searchSort: StateFlow<SearchSort> = _searchSort.asStateFlow()
     val searchDateRange: StateFlow<SearchDateRange> = _searchDateRange.asStateFlow()
@@ -128,16 +155,27 @@ class FileListViewModel @Inject constructor(
         PagerParams(libraryId, searchQuery, scope, sort, refreshVersion)
     }
         .combine(_searchDateRange) { params, dateRange ->
-            params.copy(dateRange = dateRange)
+            // 全库搜索不依赖激活库，跨库打开结果时继续使用原分页。
+            params.copy(
+                libraryId = params.libraryId.takeUnless {
+                    params.scope == SearchScope.ALL_LIBRARIES &&
+                        (params.searchQuery.isNotBlank() || dateRange.isActive)
+                },
+                dateRange = dateRange
+            )
         }
         .distinctUntilChanged()
         .flatMapLatest { params ->
-            if (params.libraryId == null) {
+            if (params.libraryId == null &&
+                (params.scope == SearchScope.CURRENT_LIBRARY ||
+                    (params.searchQuery.isBlank() && !params.dateRange.isActive))
+            ) {
                 flowOf(androidx.paging.PagingData.empty())
             } else {
                 createPager(params.libraryId, params.searchQuery, params.scope, params.sort, params.dateRange)
             }
         }
+        .cachedIn(viewModelScope)
 
     fun updateSearchQuery(query: String) {
         if (_searchQueryInput.value != query) {
@@ -341,9 +379,19 @@ class FileListViewModel @Inject constructor(
                 initialLoadSize = PagingConfig.INITIAL_LOAD_SIZE
             ),
             pagingSourceFactory = {
-                if (searchQuery.isBlank() && libraryId != null) {
+                if (dateRange.day != null) {
+                    markdownFileDao.searchFilesByDaySummary(
+                        libraryId = if (scope == SearchScope.CURRENT_LIBRARY) libraryId else null,
+                        query = searchQuery,
+                        quickNoteGlob = quickNoteGlobForDate(dateRange.day),
+                        anyQuickNoteGlob = ANY_QUICK_NOTE_GLOB,
+                        dayStartMillis = requireNotNull(dateRange.fromMillis),
+                        dayEndMillis = requireNotNull(dateRange.toMillis),
+                        relevanceSort = sort == SearchSort.RELEVANCE && searchQuery.isNotBlank()
+                    )
+                } else if (searchQuery.isBlank() && !dateRange.isActive && libraryId != null) {
                     markdownFileDao.getFilesByLibrarySummary(libraryId)
-                } else if (scope == SearchScope.ALL_LIBRARIES && searchQuery.isNotBlank()) {
+                } else if (scope == SearchScope.ALL_LIBRARIES) {
                     if (sort == SearchSort.RELEVANCE) markdownFileDao.searchAllFilesByRelevance(searchQuery, dateRange.fromMillis, dateRange.toMillis)
                     else markdownFileDao.searchAllFilesByModified(searchQuery, dateRange.fromMillis, dateRange.toMillis)
                 } else if (libraryId != null) {

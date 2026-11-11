@@ -1,6 +1,7 @@
 package com.bird.fiber.ui.screens.search
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
@@ -53,6 +56,39 @@ import java.util.Date
 import java.util.Locale
 
 private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+
+/** 带入的日期始终可见、可清除；关键词为空也可直接浏览这一天。 */
+@Composable
+internal fun SearchDateFilterBar(
+    dateRange: FileListViewModel.SearchDateRange,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val label = when (dateRange.preset) {
+        FileListViewModel.SearchDatePreset.DAY -> "${dateRange.day}的笔记"
+        FileListViewModel.SearchDatePreset.LAST_7_DAYS -> "最近7天"
+        FileListViewModel.SearchDatePreset.LAST_30_DAYS -> "最近30天"
+        FileListViewModel.SearchDatePreset.LAST_90_DAYS -> "最近90天"
+        FileListViewModel.SearchDatePreset.CUSTOM -> listOfNotNull(
+            dateRange.fromMillis?.let(::formatShortDate),
+            dateRange.toMillis?.let { formatShortDate(it - 1) }
+        ).joinToString(" ~ ")
+        FileListViewModel.SearchDatePreset.ALL_TIME -> "日期筛选"
+    }
+    Row(
+        modifier = modifier.fillMaxWidth()
+            .background(LocalFiberSurfaceColors.current.pageBackground)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(8.dp))
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = onClear) {
+            Icon(Icons.Default.Close, contentDescription = "清除日期筛选", modifier = Modifier.size(18.dp))
+        }
+    }
+}
 
 @Composable
 internal fun EmptySearchContent(
@@ -280,6 +316,7 @@ private fun presetFromMillis(preset: FileListViewModel.SearchDatePreset): Long? 
     FileListViewModel.SearchDatePreset.LAST_30_DAYS -> System.currentTimeMillis() - 30 * DAY_MILLIS
     FileListViewModel.SearchDatePreset.LAST_90_DAYS -> System.currentTimeMillis() - 90 * DAY_MILLIS
     FileListViewModel.SearchDatePreset.CUSTOM -> null
+    FileListViewModel.SearchDatePreset.DAY -> null
 }
 
 private fun formatShortDate(millis: Long): String =

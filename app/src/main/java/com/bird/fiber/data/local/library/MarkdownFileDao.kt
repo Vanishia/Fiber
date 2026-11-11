@@ -360,4 +360,39 @@ interface MarkdownFileDao {
         dayStartMillis: Long,
         dayEndMillis: Long
     ): PagingSource<Int, MarkdownFileSummary>
+
+    /** 每日笔记内搜索，与 getFilesByDaySummary 使用相同的日期归档规则。 */
+    @Query("""
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+               (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
+               CASE
+                   WHEN :query != '' AND instr(lower(content_text), lower(:query)) > 0 THEN
+                       (CASE WHEN instr(lower(content_text), lower(:query)) > 61 THEN '…' ELSE '' END) ||
+                       substr(content_text, MAX(1, instr(lower(content_text), lower(:query)) - 60), 200)
+                   ELSE content_preview
+               END AS match_snippet
+        FROM markdown_files
+        WHERE is_deleted = 0
+        AND (:libraryId IS NULL OR library_id = :libraryId)
+        AND (name LIKE '%' || :query || '%' OR path LIKE '%' || :query || '%' OR content_text LIKE '%' || :query || '%')
+        AND (
+            name GLOB :quickNoteGlob
+            OR (name NOT GLOB :anyQuickNoteGlob AND last_modified >= :dayStartMillis AND last_modified < :dayEndMillis)
+        )
+        ORDER BY CASE WHEN :relevanceSort THEN CASE
+            WHEN name = :query OR name = :query || '.md' THEN 0
+            WHEN name LIKE :query || '%' THEN 1
+            WHEN path LIKE '%' || :query || '%' THEN 2
+            ELSE 3
+        END ELSE 0 END, last_modified DESC
+    """)
+    fun searchFilesByDaySummary(
+        libraryId: String?,
+        query: String,
+        quickNoteGlob: String,
+        anyQuickNoteGlob: String,
+        dayStartMillis: Long,
+        dayEndMillis: Long,
+        relevanceSort: Boolean
+    ): PagingSource<Int, MarkdownFileSummary>
 }

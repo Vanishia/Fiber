@@ -77,6 +77,29 @@ class NoteBrowsingInstrumentedTest {
         assertTrue(notes.isEmpty())
     }
 
+    @Test
+    fun daySearchWithoutKeywordMatchesDayBrowsingAcrossLibraries(): Unit = runBlocking {
+        for (relevance in listOf(false, true)) {
+            val notes = searchDay("", relevance = relevance)
+            assertEquals(listOf("26-08-01_09-00-00", "普通笔记"), notes.map { it.name })
+        }
+    }
+
+    @Test
+    fun daySearchCombinesKeywordAndLibraryWithoutChangingDateMeaning(): Unit = runBlocking {
+        assertEquals(listOf("26-08-01_09-00-00"), searchDay("26-08-01").map { it.name })
+        assertEquals(listOf("普通笔记"), searchDay("正文", libraryId = "b").map { it.name })
+        assertTrue(searchDay("普通", libraryId = "a").isEmpty())
+        assertTrue(searchDay("26-08-02").isEmpty())
+        assertTrue(searchDay("已删除").isEmpty())
+    }
+
+    private suspend fun searchDay(query: String, libraryId: String? = null, relevance: Boolean = true) =
+        load(database.markdownFileDao().searchFilesByDaySummary(
+            libraryId, query, quickNoteGlobForDate(day), ANY_QUICK_NOTE_GLOB,
+            dayStart, nextDayStart, relevance
+        ))
+
     private suspend fun load(source: PagingSource<Int, MarkdownFileSummary>): List<MarkdownFileSummary> {
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 40, placeholdersEnabled = false))
         check(result is PagingSource.LoadResult.Page) { "笔记分页查询失败：$result" }

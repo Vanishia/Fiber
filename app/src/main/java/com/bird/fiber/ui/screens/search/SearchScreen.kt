@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,12 +38,11 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     viewModel: FileListViewModel = hiltViewModel()
 ) {
+    val searchQuery by viewModel.searchQueryInput.collectAsStateWithLifecycle()
     val searchScope by viewModel.searchScope.collectAsStateWithLifecycle()
     val searchSort by viewModel.searchSort.collectAsStateWithLifecycle()
     val searchDateRange by viewModel.searchDateRange.collectAsStateWithLifecycle()
     val quickSearchKeywords by viewModel.quickSearchKeywords.collectAsStateWithLifecycle()
-    var searchQuery by remember { mutableStateOf("") }
-
     // "随机漫步"：当前随机命中的笔记（含全文），null 时弹窗不显示
     var randomMemo by remember { mutableStateOf<RandomMemo?>(null) }
 
@@ -55,21 +52,7 @@ fun SearchScreen(
         WindowInsets.statusBars.getTop(density).toDp()
     }
     val contentTopPadding = statusBarTopPadding + 56.dp
-
-    LaunchedEffect(searchQuery) {
-        viewModel.updateSearchQuery(searchQuery)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.updateSearchScope(FileListViewModel.SearchScope.ALL_LIBRARIES)
-        viewModel.updateSearchSort(FileListViewModel.SearchSort.RELEVANCE)
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.updateSearchQuery("")
-        }
-    }
+    val resultsTopPadding = contentTopPadding + if (searchDateRange.isActive) 48.dp else 0.dp
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -81,9 +64,9 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (searchQuery.isBlank()) {
+            if (searchQuery.isBlank() && !searchDateRange.isActive) {
                 EmptySearchContent(
-                    onQuickSearchClick = { query -> searchQuery = query },
+                    onQuickSearchClick = viewModel::updateSearchQuery,
                     scope = searchScope,
                     onScopeChange = viewModel::updateSearchScope,
                     dateRange = searchDateRange,
@@ -93,7 +76,7 @@ fun SearchScreen(
                     onRandomMemoClick = {
                         viewModel.loadRandomMemo(searchScope) { memo -> randomMemo = memo }
                     },
-                    topPadding = contentTopPadding,
+                    topPadding = resultsTopPadding,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -103,15 +86,23 @@ fun SearchScreen(
                     searchSort = searchSort,
                     onSortChange = viewModel::updateSearchSort,
                     onFileClick = { file -> viewModel.openSearchResult(file, onFileClick) },
-                    topPadding = contentTopPadding,
+                    topPadding = resultsTopPadding,
                     modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            if (searchDateRange.isActive) {
+                SearchDateFilterBar(
+                    dateRange = searchDateRange,
+                    onClear = { viewModel.updateSearchDateRange(FileListViewModel.SearchDateRange()) },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = contentTopPadding)
                 )
             }
 
             SearchHeader(
                 searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                onClearClick = { searchQuery = "" },
+                onSearchQueryChange = viewModel::updateSearchQuery,
+                onClearClick = { viewModel.updateSearchQuery("") },
                 onBackClick = onBackClick,
                 modifier = headerModifier.align(Alignment.TopCenter)
             )

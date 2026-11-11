@@ -7,6 +7,7 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig as AndroidPagingConfig
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
+import androidx.paging.cachedIn
 import androidx.paging.map
 import com.bird.fiber.data.config.PagingConfig
 import com.bird.fiber.data.local.library.LibraryRepository
@@ -43,10 +44,10 @@ import javax.inject.Inject
 class NoteListViewModel @Inject constructor(
     private val markdownFileDao: MarkdownFileDao,
     libraryRepository: LibraryRepository,
-    savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val dateFlow: StateFlow<LocalDate?> = savedStateHandle
+    val date: StateFlow<LocalDate?> = savedStateHandle
         .getStateFlow<String?>(ARG_DATE, savedStateHandle.get<String>(ARG_DATE))
         .map { raw -> raw?.let { runCatching { LocalDate.parse(it) }.getOrNull() } }
         .stateIn(
@@ -56,11 +57,11 @@ class NoteListViewModel @Inject constructor(
                 ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         )
 
-    val title: StateFlow<String> = dateFlow
+    val title: StateFlow<String> = date
         .map { date -> date?.let { "${it}的笔记" } ?: "全部笔记" }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialTitle())
 
-    val emptyText: StateFlow<String> = dateFlow
+    val emptyText: StateFlow<String> = date
         .map { date -> if (date != null) "这一天没有笔记" else "还没有笔记" }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialEmptyText())
 
@@ -73,8 +74,8 @@ class NoteListViewModel @Inject constructor(
             initialValue = null
         )
 
-    val pager: Flow<PagingData<MarkdownFileMeta>> = dateFlow
-        .flatMapLatest { date ->
+    val pager: Flow<PagingData<MarkdownFileMeta>> = date
+        .flatMapLatest { day ->
             Pager(
                 config = AndroidPagingConfig(
                     pageSize = PagingConfig.PAGE_SIZE,
@@ -82,17 +83,23 @@ class NoteListViewModel @Inject constructor(
                     prefetchDistance = PagingConfig.PREFETCH_DISTANCE,
                     initialLoadSize = PagingConfig.INITIAL_LOAD_SIZE
                 ),
-                pagingSourceFactory = { createPagingSource(date) }
+                pagingSourceFactory = { createPagingSource(day) }
             ).flow.map { pagingData ->
                 pagingData.map { summary -> summary.toMarkdownFileMeta() }
             }
         }
+        .cachedIn(viewModelScope)
+
+    /** 日间翻页直接更新当前页面，不把每一天压进导航栈。 */
+    fun showDate(day: LocalDate) {
+        savedStateHandle[ARG_DATE] = day.toString()
+    }
 
     private fun initialTitle(): String =
-        dateFlow.value?.let { "${it}的笔记" } ?: "全部笔记"
+        date.value?.let { "${it}的笔记" } ?: "全部笔记"
 
     private fun initialEmptyText(): String =
-        if (dateFlow.value != null) "这一天没有笔记" else "还没有笔记"
+        if (date.value != null) "这一天没有笔记" else "还没有笔记"
 
     private fun createPagingSource(date: LocalDate?): PagingSource<Int, MarkdownFileSummary> {
         val day = date ?: return markdownFileDao.getAllFilesSummary()

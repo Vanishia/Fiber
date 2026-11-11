@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +57,7 @@ import kotlinx.coroutines.launch
 fun NoteListRouteScreen(
     onBackClick: () -> Unit,
     onFileClick: (String, Boolean) -> Unit,
-    onSearchClick: () -> Unit,
+    onSearchClick: (LocalDate?) -> Unit,
     onAddLibrary: () -> Unit,
     onSettingsClick: () -> Unit,
     onManageAttachments: (String) -> Unit,
@@ -66,11 +67,24 @@ fun NoteListRouteScreen(
     onLibrarySelected: (String) -> Unit,
     viewModel: NoteListViewModel = hiltViewModel()
 ) {
+    val date by viewModel.date.collectAsStateWithLifecycle()
+
+    if (date != null) {
+        NoteListWithActions(
+            viewModel = viewModel,
+            onMenuClick = {},
+            onSearchClick = { onSearchClick(date) },
+            onFileClick = onFileClick,
+            onAddLibrary = onAddLibrary,
+            date = date,
+            onBackClick = onBackClick
+        )
+        return
+    }
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val activeLibraryId by viewModel.activeLibraryId.collectAsStateWithLifecycle()
-    val title by viewModel.title.collectAsStateWithLifecycle()
-    val emptyText by viewModel.emptyText.collectAsStateWithLifecycle()
 
     fun closeDrawer() {
         scope.launch { drawerState.close() }
@@ -119,13 +133,12 @@ fun NoteListRouteScreen(
             }
         }
     ) {
-        NoteListScreen(
-            title = title,
-            emptyText = emptyText,
-            pager = viewModel.pager,
+        NoteListWithActions(
+            viewModel = viewModel,
             onMenuClick = { scope.launch { drawerState.open() } },
-            onSearchClick = onSearchClick,
-            onFileClick = onFileClick
+            onSearchClick = { onSearchClick(date) },
+            onFileClick = onFileClick,
+            onAddLibrary = onAddLibrary
         )
     }
 }
@@ -133,8 +146,8 @@ fun NoteListRouteScreen(
 /**
  * 笔记浏览页（"全部笔记" / 某日笔记共用）
  *
- * 复用主界面的卡片与顶栏样式（菜单 + 搜索 + 标题），
- * 但没有快速笔记输入框和新建按钮
+ * 每日笔记使用独立顶栏：返回、搜索、居中日期以及前后日切换。
+ * 全部笔记保留菜单入口；两种模式共用笔记卡片。
  */
 @Composable
 fun NoteListScreen(
@@ -143,8 +156,16 @@ fun NoteListScreen(
     pager: Flow<PagingData<MarkdownFileMeta>>,
     onMenuClick: () -> Unit,
     onSearchClick: () -> Unit,
-    onFileClick: (String, Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    onFileClick: (MarkdownFileMeta, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    date: LocalDate? = null,
+    onBackClick: () -> Unit = {},
+    onDayChange: (LocalDate) -> Unit = {},
+    onCreateClick: (() -> Unit)? = null,
+    onLongPress: (MarkdownFileMeta) -> Unit = {},
+    onDeleteRequest: (MarkdownFileMeta) -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {}
 ) {
     val lazyPagingItems = pager.collectAsLazyPagingItems()
 
@@ -157,7 +178,9 @@ fun NoteListScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LocalFiberSurfaceColors.current.pageBackground,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = bottomBar,
+        snackbarHost = snackbarHost
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when {
@@ -184,21 +207,36 @@ fun NoteListScreen(
                 }
 
                 else -> {
-                    NoteList(
-                        lazyPagingItems = lazyPagingItems,
-                        onFileClick = onFileClick,
-                        topPadding = listTopPadding
-                    )
+                    key(date) {
+                        NoteList(
+                            lazyPagingItems = lazyPagingItems,
+                            onFileClick = onFileClick,
+                            onLongPress = onLongPress,
+                            onDeleteRequest = onDeleteRequest,
+                            topPadding = listTopPadding
+                        )
+                    }
                 }
             }
 
-            FloatingTopAppBar(
-                title = title,
-                onMenuClick = onMenuClick,
-                onSearchClick = onSearchClick,
-                onCreateClick = null,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+            if (date != null) {
+                DayNotesTopBar(
+                    date = date,
+                    onBackClick = onBackClick,
+                    onSearchClick = onSearchClick,
+                    onPreviousDayClick = { onDayChange(date.minusDays(1)) },
+                    onNextDayClick = { onDayChange(date.plusDays(1)) },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            } else {
+                FloatingTopAppBar(
+                    title = title,
+                    onMenuClick = onMenuClick,
+                    onSearchClick = onSearchClick,
+                    onCreateClick = onCreateClick,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
         }
     }
 }
@@ -206,7 +244,9 @@ fun NoteListScreen(
 @Composable
 private fun NoteList(
     lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
-    onFileClick: (String, Boolean) -> Unit,
+    onFileClick: (MarkdownFileMeta, Boolean) -> Unit,
+    onLongPress: (MarkdownFileMeta) -> Unit,
+    onDeleteRequest: (MarkdownFileMeta) -> Unit,
     topPadding: Dp
 ) {
     val listState = rememberLazyListState()
@@ -226,8 +266,10 @@ private fun NoteList(
                     FileListItem(
                         file = file,
                         displayPreview = file.preview,
-                        onClick = { onFileClick(file.uri, false) },
-                        swipeEnabled = false,
+                        onClick = { onFileClick(file, false) },
+                        onLongClick = { onLongPress(file) },
+                        onDelete = { onDeleteRequest(file) },
+                        onEdit = { onFileClick(file, true) },
                         modifier = Modifier.animateItem()
                     )
                 }
