@@ -6,7 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -20,9 +22,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.update.AppUpdateInfo
@@ -212,14 +216,18 @@ private fun UpdateDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val maxDialogHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.heightIn(max = maxDialogHeight),
         title = { Text("有新版本 v${update.versionName}") },
         text = {
             Text(
                 text = update.releaseNotes.ifBlank { "暂无更新说明" },
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 style = MaterialTheme.typography.bodyMedium,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
