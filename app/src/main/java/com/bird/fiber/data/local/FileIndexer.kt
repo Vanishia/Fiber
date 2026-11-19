@@ -5,6 +5,9 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.MarkdownFileEntity
+import com.bird.fiber.data.local.library.LibraryEntity
+import com.bird.fiber.data.model.FileError
+import com.bird.fiber.data.model.FileResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -36,6 +39,48 @@ class FileIndexer internal constructor(
     )
 
     private val mutex = Mutex()
+
+    /** SAF and the URI switch share the same lock as saves, scans and backfill. */
+    suspend fun renameFile(
+        contentResolver: ContentResolver,
+        fileUri: String,
+        newName: String,
+        resolveLibrary: suspend (String?) -> LibraryEntity?
+    ): FileResult<String> = withContext(Dispatchers.IO) {
+        withIndexLock(null, "file-rename-index") {
+            val old = markdownFileDao.getFileByUri(fileUri)
+            val library = resolveLibrary(old?.libraryId)
+            val links = markdownFileDao.getNoteTags(fileUri)
+            val renamed = DocumentsContract.renameDocument(contentResolver, Uri.parse(fileUri), newName)
+                ?: return@withIndexLock FileResult.Error(FileError.IOFailed(fileUri, IllegalStateException("无法重命名文档，可能存在同名文件")))
+            val newUri = renamed.toString()
+            try {
+                val trusted = old != null && (old.contentText.isNotEmpty() || old.size == 0L || old.tagIndexVersion > 0)
+                if (old != null && trusted) {
+                    // A pure rename migrates the saved snapshot, never the editor's draft.
+                    // Keep sync timestamps: an external modification must still trigger a read.
+                    val metadata = library?.let {
+                        runCatching { scanner.scanSingleFile(contentResolver, it.id, it.folderUri, newUri) }.getOrNull()
+                    }
+                    val fileName = metadata?.name ?: newName.removeSuffix(".md")
+                    val path = metadata?.path ?: old.path.substringBeforeLast('/', "").let { prefix ->
+                        if (prefix.isEmpty()) newName else "$prefix/$newName"
+                    }
+                    writer.migrateUri(fileUri, old.copy(uri = newUri, name = fileName, path = path), links)
+                } else {
+                    checkNotNull(library) { "找不到笔记所属库" }
+                    val scanned = checkNotNull(scanner.scanSingleFile(contentResolver, library.id, library.folderUri, newUri))
+                    val content = contentReader.read(contentResolver, renamed)
+                    writer.replaceUriWithContent(fileUri, scanned.toEntity(previewReader.readFromContent(content), content,
+                        MarkdownUtils.containsImage(content), extractFirstImagePath(content)))
+                }
+                FileResult.Success(newUri)
+            } catch (error: Exception) {
+                // SAF already succeeded. Even cancellation must not hide the actual new URI.
+                FileResult.Error(FileError.RenameIndexPending(newUri, library?.id ?: old?.libraryId, error))
+            }
+        }
+    }
 
     /**
      * 统计待重建索引（摘要为空）的笔记数
@@ -195,8 +240,7 @@ class FileIndexer internal constructor(
             try {
                 val existingEntity = markdownFileDao.getFileByUri(fileUri)
                 if (existingEntity == null) {
-                    Timber.w("FileIndexer: update skipped, missing file=%s", fileUri)
-                    return@withIndexLock
+                    error("文件已保存，但索引缺失，请同步笔记所属库后重试")
                 }
 
                 writer.update(
@@ -216,6 +260,7 @@ class FileIndexer internal constructor(
                 throw e
             } catch (e: Exception) {
                 Timber.e(e, "FileIndexer: update after save failed uri=%s", fileUri)
+                throw e
             }
         }
     }

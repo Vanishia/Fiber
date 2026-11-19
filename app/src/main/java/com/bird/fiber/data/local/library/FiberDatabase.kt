@@ -12,18 +12,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * Room 数据库实例，包含所有表：
  * - libraries（笔记库）
- * - markdown_files（文件索引）✨ 新增
- *
- * 未来可以扩展：
- * - tags（标签）
- * - attachments（附件）
+ * - markdown_files（文件索引）
+ * - tags / note_tags（全局标签及正文直接引用）
  */
 @Database(
     entities = [
         LibraryEntity::class,
-        MarkdownFileEntity::class  // ✨ 新增
+        MarkdownFileEntity::class,
+        TagEntity::class,
+        NoteTagEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class FiberDatabase : RoomDatabase() {
@@ -38,8 +37,22 @@ abstract class FiberDatabase : RoomDatabase() {
      */
     abstract fun markdownFileDao(): MarkdownFileDao
 
+    abstract fun tagDao(): TagDao
+
     companion object {
         private const val DATABASE_NAME = "fiber_database"
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE markdown_files ADD COLUMN tag_index_version INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("CREATE TABLE IF NOT EXISTS tags (path TEXT NOT NULL PRIMARY KEY, display_path TEXT NOT NULL, created_at INTEGER NOT NULL, is_manual INTEGER NOT NULL)")
+                database.execSQL("""CREATE TABLE IF NOT EXISTS note_tags (
+                    note_uri TEXT NOT NULL, tag_path TEXT NOT NULL, PRIMARY KEY(note_uri, tag_path),
+                    FOREIGN KEY(note_uri) REFERENCES markdown_files(uri) ON DELETE CASCADE,
+                    FOREIGN KEY(tag_path) REFERENCES tags(path) ON DELETE CASCADE)""")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_note_tags_tag_path ON note_tags(tag_path)")
+            }
+        }
 
         @Volatile
         private var INSTANCE: FiberDatabase? = null
@@ -124,7 +137,7 @@ abstract class FiberDatabase : RoomDatabase() {
                     FiberDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
 
                 INSTANCE = instance

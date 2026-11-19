@@ -231,7 +231,7 @@ class LibraryRepositoryTest {
     }
 
     @Test
-    fun validateAndCleanupInvalidLibraries_removesInvalidLibraries() = runTest {
+    fun validateAndCleanupInvalidLibraries_retainsLibrariesWhenPermissionIsLost() = runTest {
         // Arrange
         val validLibrary = LibraryEntity("1", "有效库", "content://valid", 1000, 2000, false)
         val invalidLibrary = LibraryEntity("2", "无效库", "content://invalid", 1000, 2000, false)
@@ -254,8 +254,8 @@ class LibraryRepositoryTest {
         val removedCount = repository.validateAndCleanupInvalidLibraries(contentResolver)
 
         // Assert
-        assertEquals(1, removedCount)
-        coVerify { libraryDao.deleteLibrary(invalidLibrary) }
+        assertEquals(0, removedCount)
+        coVerify(exactly = 0) { libraryDao.deleteLibrary(invalidLibrary) }
         coVerify(exactly = 0) { libraryDao.deleteLibrary(validLibrary) }
     }
 

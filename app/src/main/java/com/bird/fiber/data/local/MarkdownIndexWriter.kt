@@ -2,13 +2,15 @@ package com.bird.fiber.data.local
 
 import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.MarkdownFileEntity
+import com.bird.fiber.data.local.library.NoteTagEntity
+import com.bird.fiber.domain.markdown.TagParser
 
 class MarkdownIndexWriter(
     private val markdownFileDao: MarkdownFileDao
 ) {
     suspend fun upsertBatch(filesToUpsert: List<MarkdownFileEntity>) {
         if (filesToUpsert.isNotEmpty()) {
-            markdownFileDao.insertAll(filesToUpsert)
+            filesToUpsert.forEach { insert(it) }
         }
     }
 
@@ -19,7 +21,10 @@ class MarkdownIndexWriter(
     }
 
     suspend fun insert(entity: MarkdownFileEntity) {
-        markdownFileDao.insert(entity)
+        check(entity.tagIndexVersion <= TagParser.CURRENT_VERSION) {
+            "标签索引来自较新版本，请更新应用后重试"
+        }
+        markdownFileDao.writeTagIndex(entity, TagParser.parse(entity.contentText))
     }
 
     suspend fun insert(
@@ -29,7 +34,7 @@ class MarkdownIndexWriter(
         hasImage: Boolean,
         firstImagePath: String = ""
     ) {
-        markdownFileDao.insert(
+        insert(
             scannedFile.toEntity(
                 contentPreview = contentPreview,
                 contentText = contentText,
@@ -40,7 +45,15 @@ class MarkdownIndexWriter(
     }
 
     suspend fun update(entity: MarkdownFileEntity) {
-        markdownFileDao.update(entity)
+        insert(entity)
+    }
+
+    suspend fun migrateUri(oldUri: String, entity: MarkdownFileEntity, links: List<NoteTagEntity>) {
+        markdownFileDao.migrateUri(oldUri, entity, links)
+    }
+
+    suspend fun replaceUriWithContent(oldUri: String, entity: MarkdownFileEntity) {
+        markdownFileDao.replaceUriIndex(oldUri, entity, TagParser.parse(entity.contentText))
     }
 
     suspend fun delete(fileUri: String) {

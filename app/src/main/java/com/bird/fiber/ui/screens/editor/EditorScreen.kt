@@ -160,12 +160,10 @@ fun EditorScreen(
                 val newName = renameName.trim()
                 showRenameDialog = false
                 if (newName.isNotBlank() && newName != uiState.fileName) {
-                    viewModel.renameFile(newName) { success ->
-                        Toast.makeText(
-                            context,
-                            if (success) "已重命名为「$newName」" else "重命名失败，可能存在同名文件",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                    viewModel.renameFile(newName) { outcome ->
+                        if (outcome == EditorRenameOutcome.Success) {
+                            Toast.makeText(context, "已重命名为「$newName」", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }

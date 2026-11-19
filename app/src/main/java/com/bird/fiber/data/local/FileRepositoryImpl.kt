@@ -159,29 +159,10 @@ class FileRepositoryImpl @Inject constructor(
         action = "rename"
     ) {
         val finalFileName = ensureMarkdownExtension(newName)
-        // 重命名前先记录文件当前索引所属的库，避免跨库操作时把索引挂到活动库
-        val indexedLibraryId = fileIndexer.getIndexedLibraryId(fileUri)
-        val renamedUri = DocumentsContract.renameDocument(
-            context.contentResolver,
-            Uri.parse(fileUri),
-            finalFileName
-        ) ?: return@ioFileResult FileResult.Error(
-            FileError.IOFailed(fileUri, IllegalStateException("无法重命名文档，可能存在同名文件"))
-        )
-
-        fileIndexer.deleteFile(fileUri)
-        val library = indexedLibraryId?.let { libraryRepository.getLibraryById(it) }
-            ?: libraryRepository.getActiveLibrary().firstOrNull()
-        library?.let {
-            fileIndexer.insertFile(
-                contentResolver = context.contentResolver,
-                libraryId = it.id,
-                rootFolderUri = it.folderUri,
-                fileUri = renamedUri.toString()
-            )
+        fileIndexer.renameFile(context.contentResolver, fileUri, finalFileName) { indexedLibraryId ->
+            if (indexedLibraryId != null) libraryRepository.getLibraryById(indexedLibraryId)
+            else libraryRepository.getActiveLibrary().firstOrNull()
         }
-
-        FileResult.Success(renamedUri.toString())
     }
 
     override suspend fun hasSelectedFolder(): Boolean {
@@ -195,6 +176,8 @@ class FileRepositoryImpl @Inject constructor(
     ): FileResult<T> = withContext(Dispatchers.IO) {
         try {
             block()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: SecurityException) {
             Timber.e(e, "FileRepository: %s failed by permission target=%s", action, target)
             FileResult.Error(FileError.PermissionDenied(target))

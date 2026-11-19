@@ -76,6 +76,7 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 }
 
 // Room schema 配置
@@ -162,6 +163,7 @@ dependencies {
 
     // Room 测试
     testImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
 
     // Hilt 测试
     testImplementation("com.google.dagger:hilt-android-testing:2.48")

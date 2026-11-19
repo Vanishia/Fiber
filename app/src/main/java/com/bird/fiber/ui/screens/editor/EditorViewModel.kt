@@ -8,6 +8,7 @@ import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.data.model.onError
 import com.bird.fiber.data.model.onSuccess
 import com.bird.fiber.data.model.toUserMessage
+import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
@@ -223,28 +224,47 @@ class EditorViewModel : ViewModel {
      * SAF 重命名会生成新 URI，成功后必须同步更新 currentFileUri，
      * 否则后续保存会写到已失效的旧 URI
      */
-    fun renameFile(newName: String, onComplete: (Boolean) -> Unit) {
+    internal fun renameFile(newName: String, onComplete: (EditorRenameOutcome) -> Unit) {
         val uri = currentFileUri ?: return
-        if (_uiState.value.isSaving || renameInProgress || _uiState.value.isLoading) { onComplete(false); return }
+        if (_uiState.value.isSaving || renameInProgress || _uiState.value.isLoading) {
+            onComplete(EditorRenameOutcome.Failure)
+            return
+        }
         val identity = generation
         renameInProgress = true
         viewModelScope.launch {
             fileRepository.renameFile(uri, newName)
                 .onSuccess { newUri ->
                     renameInProgress = false
-                    if (generation != identity) { onComplete(false); return@onSuccess }
+                    if (generation != identity) {
+                        onComplete(EditorRenameOutcome.Failure)
+                        return@onSuccess
+                    }
                     currentFileUri = newUri
                     preview.clear()
                     requestRender(immediate = true)
                     _uiState.value = _uiState.value.copy(fileName = UriHelper.extractFileName(newUri))
                     // 通知文件列表刷新名称
                     eventBus.emit(AppEvent.FileUpdated(newUri))
-                    onComplete(true)
+                    onComplete(EditorRenameOutcome.Success)
                 }
                 .onError { error ->
                     renameInProgress = false
+                    if (error is FileError.RenameIndexPending && generation == identity) {
+                        currentFileUri = error.newUri
+                        preview.clear()
+                        requestRender(immediate = true)
+                        _uiState.value = _uiState.value.copy(
+                            fileName = UriHelper.extractFileName(error.newUri),
+                            error = error.toUserMessage()
+                        )
+                        eventBus.emit(AppEvent.FileUpdated(error.newUri))
+                        onComplete(EditorRenameOutcome.IndexPending)
+                        return@onError
+                    }
+                    _uiState.value = _uiState.value.copy(error = error.toUserMessage())
                     Timber.e("EditorViewModel: 重命名失败 uri=$uri, error=$error")
-                    onComplete(false)
+                    onComplete(EditorRenameOutcome.Failure)
                 }
         }
     }
@@ -302,4 +322,10 @@ class EditorViewModel : ViewModel {
         if (!_uiState.value.isPreviewMode || _uiState.value.isLoading) return
         preview.request(snapshot(), immediate)
     }
+}
+
+internal enum class EditorRenameOutcome {
+    Success,
+    IndexPending,
+    Failure
 }

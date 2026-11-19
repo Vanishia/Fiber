@@ -8,6 +8,7 @@ import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.local.library.toTarget
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.data.model.toUserMessage
 import com.bird.fiber.data.repository.FileRepository
@@ -70,7 +71,12 @@ class NoteListActionsViewModel @Inject constructor(
                 eventBus.emit(AppEvent.FileUpdated(result.data))
                 message("已重命名为「$name」")
             }
-            is FileResult.Error -> message(result.error.toUserMessage())
+            is FileResult.Error -> {
+                if (result.error is FileError.RenameIndexPending) {
+                    eventBus.emit(AppEvent.FileUpdated(result.error.newUri))
+                }
+                message(result.error.toUserMessage())
+            }
             FileResult.Loading -> Unit
         }
     }

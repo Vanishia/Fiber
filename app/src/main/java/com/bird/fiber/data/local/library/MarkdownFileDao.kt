@@ -7,6 +7,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.bird.fiber.domain.markdown.ParsedTag
+import com.bird.fiber.domain.markdown.TagParser
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -16,6 +18,55 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface MarkdownFileDao {
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTag(tag: TagEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNoteTags(tags: List<NoteTagEntity>)
+
+    @Query("DELETE FROM note_tags WHERE note_uri = :uri")
+    suspend fun clearNoteTags(uri: String)
+
+    @Query("SELECT * FROM note_tags WHERE note_uri = :uri")
+    suspend fun getNoteTags(uri: String): List<NoteTagEntity>
+
+    @Query("SELECT tag_index_version FROM markdown_files WHERE uri = :uri")
+    suspend fun getTagIndexVersion(uri: String): Int?
+
+    @Query("SELECT COUNT(*) FROM markdown_files WHERE is_deleted = 0 AND tag_index_version < :version")
+    suspend fun countPendingTags(version: Int): Int
+
+    @Query("SELECT COUNT(*) FROM markdown_files WHERE is_deleted = 0 AND tag_index_version < :version")
+    fun observePendingTags(version: Int): Flow<Int>
+
+    @Query("SELECT uri FROM markdown_files WHERE is_deleted = 0 AND tag_index_version < :version AND uri > :afterUri ORDER BY uri LIMIT :limit")
+    suspend fun pendingTagUris(version: Int, afterUri: String, limit: Int): List<String>
+
+    @Transaction
+    suspend fun writeTagIndex(file: MarkdownFileEntity, tags: List<ParsedTag>) {
+        check((getTagIndexVersion(file.uri) ?: 0) <= TagParser.CURRENT_VERSION) {
+            "标签索引来自较新版本，请更新应用后重试"
+        }
+        // REPLACE cascades old links; the complete replacement is in this same transaction.
+        insert(file.copy(tagIndexVersion = TagParser.CURRENT_VERSION))
+        val now = System.currentTimeMillis()
+        tags.forEach { insertTag(TagEntity(it.path, it.displayPath, now)) }
+        insertNoteTags(tags.map { NoteTagEntity(file.uri, it.path) })
+    }
+
+    @Transaction
+    suspend fun migrateUri(oldUri: String, file: MarkdownFileEntity, links: List<NoteTagEntity>) {
+        insert(file)
+        insertNoteTags(links.map { it.copy(noteUri = file.uri) })
+        if (oldUri != file.uri) delete(oldUri)
+    }
+
+    @Transaction
+    suspend fun replaceUriIndex(oldUri: String, file: MarkdownFileEntity, tags: List<ParsedTag>) {
+        writeTagIndex(file, tags)
+        if (oldUri != file.uri) delete(oldUri)
+    }
 
     /**
      * 插入文件记录

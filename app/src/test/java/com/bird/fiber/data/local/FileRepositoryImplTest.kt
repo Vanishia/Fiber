@@ -124,7 +124,7 @@ class FileRepositoryImplTest {
     }
 
     @Test
-    fun renameFile_reindexesIntoOriginalIndexedLibrary() = runTest {
+    fun renameFile_resolvesOriginalLibraryInsideCoordinatedOperation() = runTest {
         val fileUriString = "content://documents/library-a/note.md"
         val fileUri = mockk<Uri>()
         val renamedUri = mockk<Uri>()
@@ -141,17 +141,17 @@ class FileRepositoryImplTest {
         every { DocumentsContract.renameDocument(contentResolver, fileUri, "renamed.md") } returns renamedUri
         coEvery { fileIndexer.getIndexedLibraryId(fileUriString) } returns "library-a"
         coEvery { libraryRepository.getLibraryById("library-a") } returns libraryA
+        coEvery { fileIndexer.renameFile(contentResolver, fileUriString, "renamed.md", any()) } coAnswers {
+            val resolve = arg<suspend (String?) -> LibraryEntity?>(3)
+            org.junit.Assert.assertEquals(libraryA, resolve("library-a"))
+            FileResult.Success(renamedUriString)
+        }
 
         val result = repository.renameFile(fileUriString, "renamed")
 
         assertTrue(result.toString(), result is FileResult.Success)
-        coVerify(exactly = 1) { fileIndexer.deleteFile(fileUriString) }
-        coVerify(exactly = 1) {
-            fileIndexer.insertFile(contentResolver, "library-a", "content://tree/library-a", renamedUriString)
-        }
-        coVerify(exactly = 0) {
-            fileIndexer.insertFile(contentResolver, "library-b", any(), any())
-        }
+        coVerify(exactly = 0) { fileIndexer.deleteFile(any()) }
+        coVerify(exactly = 0) { fileIndexer.insertFile(any(), any(), any(), any()) }
     }
 
     @Test
@@ -164,13 +164,16 @@ class FileRepositoryImplTest {
         every { renamedUri.toString() } returns renamedUriString
         every { DocumentsContract.renameDocument(contentResolver, fileUri, "renamed.md") } returns renamedUri
         coEvery { fileIndexer.getIndexedLibraryId(fileUriString) } returns null
+        coEvery { fileIndexer.renameFile(contentResolver, fileUriString, "renamed.md", any()) } coAnswers {
+            val resolve = arg<suspend (String?) -> LibraryEntity?>(3)
+            org.junit.Assert.assertEquals(activeLibraryB, resolve(null))
+            FileResult.Success(renamedUriString)
+        }
 
         val result = repository.renameFile(fileUriString, "renamed")
 
         assertTrue(result.toString(), result is FileResult.Success)
-        coVerify(exactly = 1) {
-            fileIndexer.insertFile(contentResolver, "library-b", activeLibraryB.folderUri, renamedUriString)
-        }
+        coVerify(exactly = 1) { fileIndexer.renameFile(contentResolver, fileUriString, "renamed.md", any()) }
     }
 
     private fun prepareDocumentCreation(output: ByteArrayOutputStream?): Pair<Uri, String> {

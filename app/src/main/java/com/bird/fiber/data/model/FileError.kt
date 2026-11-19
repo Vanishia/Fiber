@@ -6,6 +6,7 @@ package com.bird.fiber.data.model
  * 定义了所有可能的文件操作错误，方便调用者针对不同错误做不同处理
  */
 sealed class FileError {
+    data class RenameIndexPending(val newUri: String, val libraryId: String?, val cause: Throwable) : FileError()
     /**
      * 权限不足
      *
@@ -61,6 +62,7 @@ sealed class FileError {
  * 统一错误处理逻辑，避免在多个 ViewModel 中重复
  */
 fun FileError.toUserMessage(): String = when (this) {
+    is FileError.RenameIndexPending -> "文件已重命名，索引待修复，请同步笔记所属库"
     is com.bird.fiber.data.model.FileError.PermissionDenied -> "没有权限访问"
     is com.bird.fiber.data.model.FileError.NotFound -> "文件或文件夹不存在"
     is com.bird.fiber.data.model.FileError.IOFailed -> "操作失败: ${(this as com.bird.fiber.data.model.FileError.IOFailed).cause?.message ?: "未知原因"}"

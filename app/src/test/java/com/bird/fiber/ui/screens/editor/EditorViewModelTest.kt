@@ -687,12 +687,32 @@ class EditorViewModelTest {
         coEvery { fileRepository.saveFileContent(any(), any()) } returns FileResult.Success(Unit)
         viewModel.loadFile("a")
         advanceUntilIdle()
-        viewModel.renameFile("b") { assertTrue(it) }
+        viewModel.renameFile("b") { assertEquals(EditorRenameOutcome.Success, it) }
         advanceUntilIdle()
         assertEquals("b", viewModel.renderState.value.document?.fileUri)
         viewModel.saveFile()
         advanceUntilIdle()
         coVerify { fileRepository.saveFileContent("b", "![图](a.png)") }
+    }
+
+    @Test
+    fun renameIndexFailureStillRefreshesPreviewAndUsesNewUriForSave() = runTest {
+        coEvery { fileRepository.readFileContent("a") } returns FileResult.Success("保存的正文")
+        coEvery { fileRepository.renameFile("a", "b") } returns FileResult.Error(
+            com.bird.fiber.data.model.FileError.RenameIndexPending("b", "library", IllegalStateException("index")))
+        coEvery { fileRepository.saveFileContent(any(), any()) } returns FileResult.Success(Unit)
+        viewModel.loadFile("a")
+        advanceUntilIdle()
+        viewModel.onContentChange("未保存草稿")
+        viewModel.renameFile("b") { assertEquals(EditorRenameOutcome.IndexPending, it) }
+        advanceUntilIdle()
+        assertEquals("b", viewModel.renderState.value.document?.fileUri)
+        assertEquals("未保存草稿", viewModel.uiState.value.content)
+        assertTrue(viewModel.uiState.value.error.orEmpty().contains("索引待修复"))
+        viewModel.saveFile()
+        advanceUntilIdle()
+        coVerify { fileRepository.saveFileContent("b", "未保存草稿") }
+        coVerify(exactly = 0) { fileRepository.saveFileContent("a", any()) }
     }
 
     @Test

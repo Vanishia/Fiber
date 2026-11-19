@@ -111,7 +111,10 @@ data class MarkdownFileEntity(
      * 未来可以用于实现回收站功能
      */
     @ColumnInfo(name = "is_deleted")
-    val isDeleted: Int = 0
+    val isDeleted: Int = 0,
+
+    @ColumnInfo(name = "tag_index_version", defaultValue = "0")
+    val tagIndexVersion: Int = 0
 )
 
 /**

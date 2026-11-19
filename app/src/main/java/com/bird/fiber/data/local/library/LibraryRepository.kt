@@ -114,24 +114,20 @@ class LibraryRepository(
     }
 
     /**
-     * 验证并清理无效的库
+     * 验证库访问权限，保留暂时不可用的库及其可用索引。
      *
-     * 检查每个库的 URI 是否仍然可访问，删除无效的库
-     * 返回被删除的库数量
+     * 重新选择同一目录可恢复授权；只有用户明确移除库才级联清理笔记与标签。
+     * 保留旧方法名和返回约定供现有启动协调层使用，此处不再自动删除记录。
      */
     suspend fun validateAndCleanupInvalidLibraries(contentResolver: ContentResolver): Int {
         val libraries = libraryDao.getAllLibrariesList()
-        var removedCount = 0
-
         for (library in libraries) {
             if (!isUriValid(contentResolver, library.folderUri)) {
-                Timber.d("删除无效库: ${library.name} (${library.folderUri})")
-                libraryDao.deleteLibrary(library)
-                removedCount++
+                Timber.w("笔记库授权暂不可用，保留索引，可重新选择目录恢复: ${library.name}")
             }
         }
 
-        return removedCount
+        return 0
     }
 
     /**

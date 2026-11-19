@@ -35,6 +35,7 @@ class FileIndexerTest {
     @After
     fun tearDown() {
         unmockkStatic(Uri::class)
+        unmockkStatic(android.provider.DocumentsContract::class)
     }
 
     private val markdownFileDao = mockk<MarkdownFileDao>(relaxed = true)
@@ -439,6 +440,75 @@ class FileIndexerTest {
         every { scanner.scan(contentResolver, "folder-c", "library-c") } returns emptyList()
         indexer.syncLibrary(contentResolver, "library-c", "folder-c", reason = "after-cancel")
         assertTrue(metrics.any { it.reason == "after-cancel" && it.acquired })
+    }
+
+    @Test
+    fun unreadableNewFileDefersMissingUriDeletionAndPreservesOldIndex() = runTest {
+        mockUriParse("new-uri")
+        every { scanner.scan(contentResolver, "folder", "library-1") } returns listOf(scannedFile("new-uri", 20, 5))
+        coEvery { markdownFileDao.getIndexSnapshotsByLibrary("library-1") } returns listOf(snapshotFile("old-uri", 10))
+        every { contentReader.read(contentResolver, any()) } throws java.io.IOException("unreadable")
+        assertTrue(fileIndexer.syncLibrary(contentResolver, "library-1", "folder") is SyncResult.Failure)
+        coVerify(exactly = 0) { writer.deleteMissing(any()) }
+        coVerify(exactly = 0) { writer.upsertBatch(any()) }
+    }
+
+    @Test
+    fun renameMigratesSavedSnapshotAndVersionWithoutReadingBody() = runTest {
+        mockUriParse("old")
+        mockkStatic(android.provider.DocumentsContract::class)
+        val renamed = mockk<Uri>()
+        every { renamed.toString() } returns "new"
+        every { android.provider.DocumentsContract.renameDocument(contentResolver, any(), "renamed.md") } returns renamed
+        val old = entityFile("old", "preview", 123, 10, "#保存的正文").copy(tagIndexVersion = 0)
+        val links = listOf(com.bird.fiber.data.local.library.NoteTagEntity("old", "保存的正文"))
+        coEvery { markdownFileDao.getFileByUri("old") } returns old
+        coEvery { markdownFileDao.getNoteTags("old") } returns links
+        val result = fileIndexer.renameFile(contentResolver, "old", "renamed.md") { libraryId ->
+            assertEquals("library-1", libraryId)
+            com.bird.fiber.data.local.library.LibraryEntity("library-1", "库", "folder", 0)
+        }
+        assertTrue(result is com.bird.fiber.data.model.FileResult.Success)
+        coVerify { writer.migrateUri("old", old.copy(uri = "new", name = "renamed", path = "renamed.md"), links) }
+        coVerify(exactly = 0) { writer.delete(any()) }
+        verify(exactly = 0) { contentReader.read(any(), any()) }
+    }
+
+    @Test
+    fun renameIndexFailureReturnsActualUriAndDoesNotDeleteOldSnapshot() = runTest {
+        mockUriParse("old")
+        mockkStatic(android.provider.DocumentsContract::class)
+        val renamed = mockk<Uri>()
+        every { renamed.toString() } returns "new"
+        every { android.provider.DocumentsContract.renameDocument(contentResolver, any(), "new.md") } returns renamed
+        coEvery { markdownFileDao.getFileByUri("old") } returns entityFile("old", "preview", 123, 10)
+        coEvery { writer.migrateUri(any(), any(), any()) } throws IllegalStateException("transaction failed")
+        val result = fileIndexer.renameFile(contentResolver, "old", "new.md") { null }
+        require(result is com.bird.fiber.data.model.FileResult.Error)
+        require(result.error is com.bird.fiber.data.model.FileError.RenameIndexPending)
+        assertEquals("new", result.error.newUri)
+        coVerify(exactly = 0) { writer.delete(any()) }
+    }
+
+    @Test
+    fun renameWithMissingCachedBodyAndReadFailureKeepsOldIndex() = runTest {
+        mockUriParse("old")
+        mockkStatic(android.provider.DocumentsContract::class)
+        val renamed = mockk<Uri>()
+        every { renamed.toString() } returns "new"
+        every { android.provider.DocumentsContract.renameDocument(contentResolver, any(), "new.md") } returns renamed
+        coEvery { markdownFileDao.getFileByUri("old") } returns entityFile("old", "", 123, 10, "")
+        every { scanner.scanSingleFile(contentResolver, "library-1", "folder", "new") } returns scannedFile("new", 200, 10)
+        every { contentReader.read(contentResolver, renamed) } throws java.io.IOException("read failed")
+        val result = fileIndexer.renameFile(contentResolver, "old", "new.md") {
+            com.bird.fiber.data.local.library.LibraryEntity("library-1", "库", "folder", 0)
+        }
+        require(result is com.bird.fiber.data.model.FileResult.Error)
+        require(result.error is com.bird.fiber.data.model.FileError.RenameIndexPending)
+        assertEquals("new", result.error.newUri)
+        coVerify(exactly = 0) { writer.migrateUri(any(), any(), any()) }
+        coVerify(exactly = 0) { writer.replaceUriWithContent(any(), any()) }
+        coVerify(exactly = 0) { writer.delete(any()) }
     }
 
     private fun entityFile(
