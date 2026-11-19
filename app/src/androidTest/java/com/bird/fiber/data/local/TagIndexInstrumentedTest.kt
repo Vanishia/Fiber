@@ -126,6 +126,16 @@ class TagIndexInstrumentedTest {
         assertEquals(listOf("new"), query("项目").map { it.uri })
     }
 
+    @Test fun backfillUsesCachedBodyEvenForSmallLibrariesAndPreservesModificationTime(): Unit = runBlocking {
+        files.insert(note("1", "a", "#旧笔记", 123))
+        val indexer = FileIndexer(files)
+        assertEquals(listOf("1"), indexer.pendingTagUris(""))
+        indexer.backfillTag(InstrumentationRegistry.getInstrumentation().targetContext.contentResolver, "1")
+        assertEquals(0, indexer.countPendingTags())
+        assertEquals(123L, files.getFileByUri("1")?.lastModified)
+        assertEquals(listOf("1"), query("旧笔记").map { it.uri })
+    }
+
     @Test fun oldCodeDoesNotOverwriteFutureParserIndexes(): Unit = runBlocking {
         writer.insert(note("1", "a", "#已保存"))
         val future = checkNotNull(files.getFileByUri("1")).copy(tagIndexVersion = TagParser.CURRENT_VERSION + 1)

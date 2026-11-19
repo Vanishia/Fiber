@@ -8,6 +8,7 @@ import com.bird.fiber.data.local.library.MarkdownFileEntity
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
+import com.bird.fiber.domain.markdown.TagParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -39,6 +40,25 @@ class FileIndexer internal constructor(
     )
 
     private val mutex = Mutex()
+
+    suspend fun countPendingTags(): Int = markdownFileDao.countPendingTags(TagParser.CURRENT_VERSION)
+
+    fun observePendingTags() = markdownFileDao.observePendingTags(TagParser.CURRENT_VERSION)
+
+    suspend fun pendingTagUris(afterUri: String, limit: Int = 25): List<String> =
+        markdownFileDao.pendingTagUris(TagParser.CURRENT_VERSION, afterUri, limit)
+
+    suspend fun backfillTag(contentResolver: ContentResolver, uri: String) = withContext(Dispatchers.IO) {
+        withIndexLock(null, "tag-backfill") {
+            val current = markdownFileDao.getFileByUri(uri) ?: return@withIndexLock
+            if (current.tagIndexVersion >= TagParser.CURRENT_VERSION || current.isDeleted != 0) return@withIndexLock
+            // Empty cached text can mean a genuine empty file or an old missing cache.
+            // Read it explicitly; unreadable files keep their old links and pending version.
+            val content = if (current.contentText.isNotEmpty()) current.contentText
+                else contentReader.read(contentResolver, Uri.parse(uri))
+            writer.insert(current.copy(contentText = content))
+        }
+    }
 
     /** SAF and the URI switch share the same lock as saves, scans and backfill. */
     suspend fun renameFile(

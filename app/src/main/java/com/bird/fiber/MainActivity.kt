@@ -12,6 +12,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import com.bird.fiber.data.local.TagBackfillCoordinator
+import com.bird.fiber.ui.components.TagBackfillOverlay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -61,6 +69,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var importShareManager: ImportShareManager
+
+    @Inject
+    lateinit var tagBackfill: TagBackfillCoordinator
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -124,12 +135,18 @@ class MainActivity : ComponentActivity() {
             ) {
                 val navController = rememberNavController()
 
-                FiberNavGraph(
-                    navController = navController,
-                    onSelectFolder = { folderPickerLauncher.launch(null) },
-                    onAddLibrary = { folderPickerLauncher.launch(null) },
-                    modifier = Modifier.fillMaxSize()
-                )
+                val tagProgress by tagBackfill.state.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) { tagBackfill.start() }
+                Box(Modifier.fillMaxSize()) {
+                    FiberNavGraph(
+                        navController = navController,
+                        onSelectFolder = { folderPickerLauncher.launch(null) },
+                        onAddLibrary = { folderPickerLauncher.launch(null) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    TagBackfillOverlay(tagProgress, tagBackfill::start,
+                        Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(12.dp))
+                }
 
                 // 外部文件导入：有待导入文件时弹出选库对话框
                 val importViewModel: ImportViewModel = hiltViewModel()
