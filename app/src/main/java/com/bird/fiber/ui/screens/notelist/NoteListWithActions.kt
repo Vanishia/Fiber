@@ -23,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,12 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.components.CreateFileDialog
-import com.bird.fiber.ui.screens.filelist.components.DeleteConfirmDialog
-import com.bird.fiber.ui.screens.filelist.components.LongPressMenuBottomSheet
-import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
 import com.bird.fiber.ui.screens.main.QuickNoteBar
 import com.bird.fiber.ui.screens.quicknote.QuickNoteViewModel
-import com.bird.fiber.utils.ShareHelper
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -61,15 +56,12 @@ internal fun NoteListWithActions(
     val library by actions.activeLibrary.collectAsStateWithLifecycle()
     val quickNote by quickNotes.uiState.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
-    val context = LocalContext.current
     val focus = LocalFocusManager.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var selectedFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var deleteFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
-    var renameFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
-    var renameName by remember { mutableStateOf("") }
     var createInLibrary by remember { mutableStateOf<LibraryEntity?>(null) }
     var createName by remember { mutableStateOf("") }
     val create: () -> Unit = {
@@ -148,33 +140,14 @@ internal fun NoteListWithActions(
         }
     )
 
-    LongPressMenuBottomSheet(
-        isVisible = showMenu,
-        onDismiss = { showMenu = false },
-        onEdit = { selectedFile?.let { actions.openFile(it, true) } },
-        onCopy = { selectedFile?.let(actions::copyFile) },
-        onShare = { selectedFile?.let { ShareHelper.shareMarkdownFile(context, it.uri, it.name.removeSuffix(".md")) } },
-        onRename = {
-            selectedFile?.let { renameName = it.name.removeSuffix(".md"); renameFile = it }
-        },
-        onDelete = { deleteFile = selectedFile }
+    NoteListItemActionOverlays(
+        selectedFile = selectedFile,
+        showMenu = showMenu,
+        onDismissMenu = { showMenu = false },
+        directDeleteFile = deleteFile,
+        onDismissDirectDelete = { deleteFile = null },
+        actions = actions
     )
-    deleteFile?.let { file ->
-        DeleteConfirmDialog(
-            fileName = file.name.removeSuffix(".md"),
-            onDismiss = { deleteFile = null },
-            onConfirm = { actions.deleteFile(file); deleteFile = null }
-        )
-    }
-    renameFile?.let { file ->
-        RenameFileDialog(
-            currentName = file.name.removeSuffix(".md"),
-            newName = renameName,
-            onNewNameChange = { renameName = it },
-            onDismiss = { renameFile = null },
-            onConfirm = { actions.renameFile(file, renameName); renameFile = null }
-        )
-    }
     createInLibrary?.let { target ->
         CreateFileDialog(
             fileName = createName,

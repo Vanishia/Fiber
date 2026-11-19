@@ -49,6 +49,7 @@ fun MainScreenContainer(
     onSettingsClick: () -> Unit = {},
     onManageAttachments: (String) -> Unit = {},
     onAllNotesClick: () -> Unit = {},
+    onTagClick: (String) -> Unit = {},
     onHeatmapClick: () -> Unit = {},
     onHeatmapDayClick: (LocalDate) -> Unit = {},
     topBarModifier: Modifier = Modifier,
@@ -108,6 +109,7 @@ fun MainScreenContainer(
             closeDrawerIfOpen()
             onAllNotesClick()
         },
+        onTagClick = { path -> closeDrawerIfOpen(); onTagClick(path) },
         onHeatmapClick = {
             closeDrawerIfOpen()
             onHeatmapClick()
@@ -149,6 +151,7 @@ private fun MainScreenRoute(
     onSettingsClick: () -> Unit,
     onManageAttachments: (String) -> Unit,
     onAllNotesClick: () -> Unit,
+    onTagClick: (String) -> Unit,
     onHeatmapClick: () -> Unit,
     onHeatmapDayClick: (LocalDate) -> Unit,
     topBarModifier: Modifier,
@@ -179,6 +182,7 @@ private fun MainScreenRoute(
                 onSettingsClick = onSettingsClick,
                 onManageAttachments = onManageAttachments,
                 onAllNotesClick = onAllNotesClick,
+                onTagClick = onTagClick,
                 onHeatmapClick = onHeatmapClick,
                 onHeatmapDayClick = onHeatmapDayClick,
                 shouldComposeContent = shouldComposeDrawer
@@ -273,6 +277,7 @@ private fun MainDrawerContent(
     onSettingsClick: () -> Unit,
     onManageAttachments: (String) -> Unit,
     onAllNotesClick: () -> Unit,
+    onTagClick: (String) -> Unit,
     onHeatmapClick: () -> Unit,
     onHeatmapDayClick: (LocalDate) -> Unit,
     shouldComposeContent: Boolean
@@ -289,6 +294,7 @@ private fun MainDrawerContent(
                 onSettingsClick = onSettingsClick,
                 onManageAttachments = onManageAttachments,
                 onAllNotesClick = onAllNotesClick,
+                onTagClick = onTagClick,
                 onHeatmapClick = onHeatmapClick,
                 onHeatmapDayClick = onHeatmapDayClick
             )

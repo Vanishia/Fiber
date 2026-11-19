@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
@@ -51,6 +53,7 @@ fun Sidebar(
     onManageAttachments: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onTagClick: (String) -> Unit = {},
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
     Box(
@@ -65,6 +68,7 @@ fun Sidebar(
             onAddLibrary = onAddLibrary,
             onSettingsClick = onSettingsClick,
             onManageAttachments = onManageAttachments,
+            onTagClick = onTagClick,
             viewModel = viewModel
         )
     }
@@ -80,25 +84,65 @@ fun SidebarContent(
     selectedLibraryId: String?,
     onLibrarySelected: (String) -> Unit,
     onAddLibrary: () -> Unit,
+    modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {},
     onManageAttachments: (String) -> Unit = {},
     onHeatmapClick: () -> Unit = {},
     onHeatmapDayClick: (LocalDate) -> Unit = {},
     onAllNotesClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
+    onTagClick: (String) -> Unit = {},
     viewModel: SidebarViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     var updateDialogInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showAddTag by remember { mutableStateOf(false) }
+    val tags by viewModel.tags.collectAsState(initial = emptyList())
+    val progress by viewModel.tagProgress.collectAsState()
 
     Column(
         modifier = modifier.fillMaxSize()
     ) {
         SidebarHeader(onSettingsClick = onSettingsClick)
 
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconToggleButton(checked = !uiState.showTags, onCheckedChange = { viewModel.selectTagView(false) }) {
+                Icon(Icons.Default.Folder, "笔记库", tint = if (!uiState.showTags) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconToggleButton(checked = uiState.showTags, onCheckedChange = { viewModel.selectTagView(true) }) {
+                Icon(Icons.Default.Tag, "标签", tint = if (uiState.showTags) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Box {
+                IconButton(onClick = { showAddMenu = true }) { Icon(Icons.Default.Add, "添加") }
+                DropdownMenu(
+                    expanded = showAddMenu,
+                    onDismissRequest = { showAddMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("添加笔记库") },
+                        leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                        onClick = {
+                            showAddMenu = false
+                            onAddLibrary()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("添加标签") },
+                        leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
+                        onClick = {
+                            showAddMenu = false
+                            showAddTag = true
+                        }
+                    )
+                }
+            }
+        }
+
         // 库列表
-        if (uiState.hasLibraries) {
+        if (uiState.showTags) {
+            TagList(tags, progress.visible, onTagClick, viewModel::deleteTag, Modifier.weight(1f))
+        } else if (uiState.hasLibraries) {
             LibraryList(
                 libraries = uiState.libraries,
                 selectedLibraryId = selectedLibraryId,
@@ -137,26 +181,15 @@ fun SidebarContent(
             )
         }
 
-        // 底部操作区
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            FilledTonalButton(
-                onClick = onAddLibrary,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("添加笔记库")
-            }
-        }
+    }
+
+    if (showAddTag) {
+        AddTagDialog(onDismiss = { showAddTag = false }, onAdd = viewModel::addTag,
+            onAdded = { path -> showAddTag = false; viewModel.selectTagView(true); onTagClick(path) })
+    }
+    uiState.error?.let { error ->
+        AlertDialog(onDismissRequest = viewModel::clearError, text = { Text(error) },
+            confirmButton = { TextButton(onClick = viewModel::clearError) { Text("确定") } })
     }
 
     // 更新详情对话框：release 说明 + 下载按钮

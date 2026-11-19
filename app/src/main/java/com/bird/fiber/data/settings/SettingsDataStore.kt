@@ -43,6 +43,7 @@ class SettingsDataStore internal constructor(
         private val UPDATE_NOTIFICATION_ENABLED = booleanPreferencesKey("update_notification_enabled")
         private val LINE_HEIGHT_PERCENT = intPreferencesKey("line_height_percent")
         private val QUICK_SEARCH_KEYWORDS = stringPreferencesKey("quick_search_keywords")
+        private val SIDEBAR_TAG_VIEW = booleanPreferencesKey("sidebar_tag_view")
 
         /** 快捷入口默认关键词 */
         val DEFAULT_QUICK_SEARCH_KEYWORDS = listOf("日报", "TODO", "会议", "灵感", "项目")
@@ -72,6 +73,12 @@ class SettingsDataStore internal constructor(
             updateNotificationEnabled = preferences[UPDATE_NOTIFICATION_ENABLED] ?: true,
             lineHeightPercent = preferences[LINE_HEIGHT_PERCENT] ?: 100
         )
+    }
+
+    val sidebarTagView: Flow<Boolean> = dataStore.data.map { it[SIDEBAR_TAG_VIEW] ?: false }
+
+    suspend fun saveSidebarTagView(tags: Boolean) {
+        dataStore.edit { it[SIDEBAR_TAG_VIEW] = tags }
     }
 
     /**

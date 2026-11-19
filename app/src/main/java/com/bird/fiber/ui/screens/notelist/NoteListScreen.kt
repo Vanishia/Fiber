@@ -65,6 +65,7 @@ fun NoteListRouteScreen(
     onHeatmapClick: () -> Unit,
     onHeatmapDayClick: (LocalDate) -> Unit,
     onLibrarySelected: (String) -> Unit,
+    onTagClick: (String) -> Unit = {},
     viewModel: NoteListViewModel = hiltViewModel()
 ) {
     val date by viewModel.date.collectAsStateWithLifecycle()
@@ -100,6 +101,7 @@ fun NoteListRouteScreen(
                 drawerContainerColor = MaterialTheme.colorScheme.surface
             ) {
                 SidebarContent(
+                    onTagClick = { path -> closeDrawer(); onTagClick(path) },
                     selectedLibraryId = activeLibraryId,
                     onLibrarySelected = { libraryId ->
                         closeDrawer()
@@ -242,12 +244,13 @@ fun NoteListScreen(
 }
 
 @Composable
-private fun NoteList(
+internal fun NoteList(
     lazyPagingItems: LazyPagingItems<MarkdownFileMeta>,
     onFileClick: (MarkdownFileMeta, Boolean) -> Unit,
     onLongPress: (MarkdownFileMeta) -> Unit,
     onDeleteRequest: (MarkdownFileMeta) -> Unit,
-    topPadding: Dp
+    topPadding: Dp,
+    showLibraryName: Boolean = false
 ) {
     val listState = rememberLazyListState()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -264,6 +267,7 @@ private fun NoteList(
                 val file = lazyPagingItems[index]
                 if (file != null) {
                     FileListItem(
+                        showLibraryName = showLibraryName,
                         file = file,
                         displayPreview = file.preview,
                         onClick = { onFileClick(file, false) },

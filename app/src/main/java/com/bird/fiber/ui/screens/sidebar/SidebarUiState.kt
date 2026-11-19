@@ -9,6 +9,7 @@ data class SidebarUiState(
     val libraries: List<LibraryEntity> = emptyList(),
     val activeLibraryId: String? = null,
     val isLoading: Boolean = false,
+    val showTags: Boolean = false,
     val error: String? = null
 ) {
     /**

@@ -31,6 +31,7 @@ import com.bird.fiber.ui.screens.main.MainScreenContainer
 import com.bird.fiber.ui.screens.notelist.NoteListRouteScreen
 import com.bird.fiber.ui.screens.quicknote.QuickNoteScreen
 import com.bird.fiber.ui.screens.search.SearchScreen
+import com.bird.fiber.ui.screens.tags.TagNotesScreen
 import com.bird.fiber.ui.screens.settings.SettingsScreen
 import com.bird.fiber.ui.screens.settings.HomeViewSettingsScreen
 import com.bird.fiber.utils.UriHelper
@@ -119,6 +120,7 @@ fun FiberNavGraph(
                     navigateFromUser(FiberRoute.attachments(libraryId))
                 },
                 onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
+                onTagClick = { path -> navigateFromUser(FiberRoute.tagNotes(path)) },
                 onHeatmapDayClick = { date ->
                     navigateToDayNotes(date)
                 },
@@ -192,6 +194,7 @@ fun FiberNavGraph(
                 },
                 // 已在全部笔记页，只需收起抽屉
                 onAllNotesClick = { },
+                onTagClick = { path -> navigateFromUser(FiberRoute.tagNotes(path)) },
                 onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 onHeatmapDayClick = { date ->
                     navigateToDayNotes(date)
@@ -217,12 +220,20 @@ fun FiberNavGraph(
                     navigateFromUser(FiberRoute.attachments(libraryId))
                 },
                 onAllNotesClick = { navigateFromUser(FiberRoute.ALL_NOTES) },
+                onTagClick = { path -> navigateFromUser(FiberRoute.tagNotes(path)) },
                 onHeatmapClick = { navigateFromUser(FiberRoute.HEATMAP) },
                 onHeatmapDayClick = { date ->
                     navigateToDayNotes(date)
                 },
                 onLibrarySelected = { popFromUser() }
             )
+        }
+
+        composable(
+            route = FiberRoute.TAG_NOTES,
+            arguments = listOf(navArgument("tagPath") { type = NavType.StringType })
+        ) {
+            TagNotesScreen(onBackClick = ::popFromUser, onFileClick = navigateToEditor)
         }
 
         composable(route = FiberRoute.HEATMAP) {
@@ -332,6 +343,9 @@ object FiberRoute {
     const val SETTINGS = "settings"
     const val HOME_VIEW_SETTINGS = "settings/home_view"
     const val ATTACHMENTS = "attachments/{libraryId}"
+    const val TAG_NOTES = "tag_notes?tagPath={tagPath}"
+
+    fun tagNotes(path: String): String = "tag_notes?tagPath=${Uri.encode(path)}"
 
     fun editor(fileUri: String): String = editor(fileUri, editMode = false)
 

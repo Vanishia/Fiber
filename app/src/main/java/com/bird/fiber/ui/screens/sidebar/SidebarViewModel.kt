@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
 import com.bird.fiber.data.settings.SettingsDataStore
+import com.bird.fiber.data.local.TagRepository
+import com.bird.fiber.data.local.TagBackfillCoordinator
 import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.data.update.UpdateChecker
 import com.bird.fiber.data.update.UpdateDownloader
@@ -34,11 +36,29 @@ class SidebarViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val updateChecker: UpdateChecker,
     private val updateDownloader: UpdateDownloader,
+    private val tagRepository: TagRepository,
+    private val tagBackfill: TagBackfillCoordinator,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SidebarUiState())
     val uiState: StateFlow<SidebarUiState> = _uiState.asStateFlow()
+
+    val tags = tagRepository.tree
+    val tagProgress = tagBackfill.state
+
+    fun selectTagView(tags: Boolean) {
+        viewModelScope.launch { settingsDataStore.saveSidebarTagView(tags) }
+    }
+
+    suspend fun addTag(input: String): String = tagRepository.add(input)
+
+    fun deleteTag(path: String) {
+        viewModelScope.launch {
+            try { tagRepository.delete(path) }
+            catch (error: Exception) { _uiState.value = _uiState.value.copy(error = error.message) }
+        }
+    }
 
     /** 可用更新信息；null 表示已是最新、检查失败或用户关闭了更新通知 */
     private val _updateInfo = MutableStateFlow<AppUpdateInfo?>(null)
@@ -50,6 +70,11 @@ class SidebarViewModel @Inject constructor(
         loadLibraries()
         observeActiveLibrary()
         observeUpdateNotificationSetting()
+        viewModelScope.launch {
+            settingsDataStore.sidebarTagView.collect { tags ->
+                _uiState.value = _uiState.value.copy(showTags = tags)
+            }
+        }
     }
 
     /**

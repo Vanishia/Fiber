@@ -21,6 +21,21 @@ class SettingsDataStoreTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
 
     @Test
+    fun `侧边栏默认显示笔记库且重新打开时恢复标签视图`() = runTest {
+        val file = temporaryFolder.root.resolve("sidebar.preferences_pb")
+        val firstScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val settings = SettingsDataStore(PreferenceDataStoreFactory.create(scope = firstScope) { file })
+        try {
+            assertEquals(false, settings.sidebarTagView.first())
+            settings.saveSidebarTagView(true)
+        } finally { firstScope.coroutineContext[Job]!!.cancelAndJoin() }
+        val reopened = SettingsDataStore(PreferenceDataStoreFactory.create(scope = backgroundScope) { file })
+        assertEquals(true, reopened.sidebarTagView.first())
+        reopened.saveSidebarTagView(false)
+        assertEquals(false, reopened.sidebarTagView.first())
+    }
+
+    @Test
     fun `未配置库及无激活库时默认条目视图`() = runTest {
         val file = temporaryFolder.root.resolve("defaults.preferences_pb")
         val settings = SettingsDataStore(PreferenceDataStoreFactory.create(scope = backgroundScope) { file })

@@ -67,7 +67,8 @@ fun FileListItem(
     modifier: Modifier = Modifier,
     swipeEnabled: Boolean = true,
     onDelete: () -> Unit = {},
-    onEdit: () -> Unit = {}
+    onEdit: () -> Unit = {},
+    showLibraryName: Boolean = false
 ) {
     val isDarkTheme = LocalFiberSurfaceColors.current.pageBackground.luminance() < 0.5f
 
@@ -79,6 +80,7 @@ fun FileListItem(
             onClick = onClick,
             onLongClick = onLongClick,
             isDarkTheme = isDarkTheme,
+            showLibraryName = showLibraryName,
             modifier = modifier
         )
         return
@@ -95,7 +97,8 @@ fun FileListItem(
             displayPreview = displayPreview,
             onClick = onClick,
             onLongClick = onLongClick,
-            isDarkTheme = isDarkTheme
+            isDarkTheme = isDarkTheme,
+            showLibraryName = showLibraryName
         )
     }
 }
@@ -108,6 +111,7 @@ private fun FileCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     isDarkTheme: Boolean,
+    showLibraryName: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -171,7 +175,13 @@ private fun FileCard(
                     )
                 }
 
-                // 底部信息：只显示日期（左下角）
+                if (showLibraryName && file.libraryName.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(file.libraryName, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                // 底部信息：显示日期（左下角）
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),

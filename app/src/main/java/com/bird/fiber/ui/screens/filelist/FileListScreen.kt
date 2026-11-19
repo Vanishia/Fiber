@@ -43,6 +43,7 @@ import com.bird.fiber.ui.screens.filelist.components.FileListSkeleton
 import com.bird.fiber.ui.screens.filelist.components.NoFolderSelected
 import com.bird.fiber.ui.screens.filelist.components.RenameFileDialog
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
+import com.bird.fiber.ui.components.FloatingTopAppBar
 import com.bird.fiber.utils.ShareHelper
 import timber.log.Timber
 
@@ -142,6 +143,12 @@ fun FileListScreen(
             uiState.showNoFolderState -> {
                 NoFolderSelected(
                     onSelectFolder = onSelectFolder
+                )
+                FloatingTopAppBar(
+                    title = "Fiber",
+                    onMenuClick = onMenuClick,
+                    onSearchClick = onSearchClick,
+                    modifier = topBarModifier.align(Alignment.TopCenter)
                 )
             }
 
