@@ -33,7 +33,8 @@ interface TagDao {
 
     @Query("""
         SELECT f.uri, f.name, f.path, f.last_modified, f.size, f.content_preview,
-               f.has_image, f.first_image_path, f.library_id, l.name AS library_name, NULL AS match_snippet
+               f.has_image, f.first_image_path, f.library_id, l.name AS library_name, NULL AS match_snippet,
+               f.pinned_library_id
         FROM markdown_files f JOIN libraries l ON l.id = f.library_id
         WHERE f.is_deleted = 0 AND EXISTS (
             SELECT 1 FROM note_tags nt WHERE nt.note_uri = f.uri AND

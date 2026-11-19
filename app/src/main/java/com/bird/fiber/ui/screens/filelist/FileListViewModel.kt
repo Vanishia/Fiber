@@ -26,6 +26,7 @@ import com.bird.fiber.utils.ANY_QUICK_NOTE_GLOB
 import com.bird.fiber.utils.quickNoteGlobForDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +60,12 @@ class FileListViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     savedStateHandle: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
+
+    data class PinReplacement(
+        val fileUri: String,
+        val fileName: String,
+        val pinnedNote: MarkdownFileDao.PinnedNote
+    )
 
     enum class SearchScope { CURRENT_LIBRARY, ALL_LIBRARIES }
     enum class SearchSort { RELEVANCE, RECENT_MODIFIED }
@@ -101,6 +108,8 @@ class FileListViewModel @Inject constructor(
     private val _currentSearchQuery = MutableStateFlow("")
     private val _currentLibraryId = MutableStateFlow<String?>(null)
     private val _refreshVersion = MutableStateFlow(0)
+    private val _pinReplacement = MutableStateFlow<PinReplacement?>(null)
+    val pinReplacement: StateFlow<PinReplacement?> = _pinReplacement.asStateFlow()
 
     // UI 输入的搜索词，经过 300ms 防抖后写入 _currentSearchQuery
     private val _searchQueryInput = MutableStateFlow("")
@@ -277,6 +286,37 @@ class FileListViewModel @Inject constructor(
         viewModelScope.launch {
             onResult(commandRunner.readFileContent(fileUri))
         }
+    }
+
+    fun togglePin(fileUri: String, confirmedPinnedUri: String? = null) {
+        viewModelScope.launch {
+            try {
+                when (val result = markdownFileDao.togglePin(fileUri, confirmedPinnedUri)) {
+                    MarkdownFileDao.PinToggleResult.Pinned -> _pinReplacement.value = null
+                    MarkdownFileDao.PinToggleResult.Unpinned -> _pinReplacement.value = null
+                    is MarkdownFileDao.PinToggleResult.ConfirmationRequired -> {
+                        val file = markdownFileDao.getFileByUri(fileUri) ?: return@launch
+                        _pinReplacement.value = PinReplacement(fileUri, file.name, result.pinnedNote)
+                    }
+                }
+                _uiState.value = _uiState.value.copy(error = null)
+                if (confirmedPinnedUri != null) _scrollToTopEvents.emit(Unit)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Timber.e(error, "Failed to toggle note pin: %s", fileUri)
+                _uiState.value = _uiState.value.copy(error = error.message ?: "置顶操作失败，请重试")
+            }
+        }
+    }
+
+    fun confirmPinReplacement() {
+        val replacement = _pinReplacement.value ?: return
+        togglePin(replacement.fileUri, replacement.pinnedNote.uri)
+    }
+
+    fun dismissPinReplacement() {
+        _pinReplacement.value = null
     }
 
     val previewCacheVersion: StateFlow<Long> = previewCache.version

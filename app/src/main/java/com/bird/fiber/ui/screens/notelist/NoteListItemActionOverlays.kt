@@ -2,10 +2,15 @@ package com.bird.fiber.ui.screens.notelist
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.components.DeleteConfirmDialog
@@ -25,6 +30,7 @@ internal fun NoteListItemActionOverlays(
     actions: NoteListActionsViewModel
 ) {
     val context = LocalContext.current
+    val pinReplacement by actions.pinReplacement.collectAsStateWithLifecycle()
     var deleteFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
     var renameFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
     var renameName by remember { mutableStateOf("") }
@@ -32,6 +38,8 @@ internal fun NoteListItemActionOverlays(
     LongPressMenuBottomSheet(
         isVisible = showMenu,
         onDismiss = onDismissMenu,
+        isPinned = selectedFile?.isPinned == true,
+        onTogglePin = { selectedFile?.let(actions::togglePin) },
         onEdit = { selectedFile?.let { actions.openFile(it, true) } },
         onCopy = { selectedFile?.let(actions::copyFile) },
         onShare = {
@@ -47,6 +55,22 @@ internal fun NoteListItemActionOverlays(
         },
         onDelete = { deleteFile = selectedFile }
     )
+
+    pinReplacement?.let { replacement ->
+        AlertDialog(
+            onDismissRequest = actions::dismissPinReplacement,
+            title = { Text("替换置顶笔记？") },
+            text = {
+                Text("「${replacement.pinnedNote.name.removeSuffix(".md")}」已置顶。继续后将改为置顶「${replacement.file.name.removeSuffix(".md")}」。")
+            },
+            confirmButton = {
+                TextButton(onClick = actions::confirmPinReplacement) { Text("替换") }
+            },
+            dismissButton = {
+                TextButton(onClick = actions::dismissPinReplacement) { Text("取消") }
+            }
+        )
+    }
 
     (deleteFile ?: directDeleteFile)?.let { file ->
         DeleteConfirmDialog(

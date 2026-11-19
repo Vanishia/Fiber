@@ -18,6 +18,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +72,7 @@ fun FileListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listViewMode by viewModel.listViewMode.collectAsStateWithLifecycle()
+    val pinReplacement by viewModel.pinReplacement.collectAsStateWithLifecycle()
 
     // 获取响应式 Paging 数据（当库或搜索词变化时自动更新）
     val lazyPagingItems = viewModel.pager.collectAsLazyPagingItems()
@@ -230,6 +232,7 @@ fun FileListScreen(
                         fileToRename = fileName to fileUri
                         renameFileName = fileName
                     },
+                    onTogglePinRequest = viewModel::togglePin,
                     onShareRequest = { fileName, fileUri ->
                         ShareHelper.shareMarkdownFile(context, fileUri, fileName)
                     },
@@ -325,6 +328,22 @@ fun FileListScreen(
                             )
                         }
                     }
+                }
+            )
+        }
+
+        pinReplacement?.let { replacement ->
+            AlertDialog(
+                onDismissRequest = viewModel::dismissPinReplacement,
+                title = { Text("替换置顶笔记？") },
+                text = {
+                    Text("「${replacement.pinnedNote.name.removeSuffix(".md")}」已置顶。继续后将改为置顶「${replacement.fileName.removeSuffix(".md")}」。")
+                },
+                confirmButton = {
+                    TextButton(onClick = viewModel::confirmPinReplacement) { Text("替换") }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissPinReplacement) { Text("取消") }
                 }
             )
         }

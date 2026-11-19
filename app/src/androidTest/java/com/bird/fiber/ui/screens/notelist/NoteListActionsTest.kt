@@ -54,6 +54,7 @@ class NoteListActionsTest {
     private val store = ViewModelStore()
     private val day = LocalDate.of(2024, 2, 29)
     private val noteUri = "content://test/b/note"
+    private val pinnedUri = "content://test/b/pinned"
     private var opened: Pair<String, Boolean>? = null
 
     @Before fun setUp(): Unit = runBlocking {
@@ -64,6 +65,11 @@ class NoteListActionsTest {
             uri = noteUri, name = "回顾笔记", path = "note.md", size = 100, libraryId = "b",
             lastModified = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
             contentPreview = "仅显示预览", contentText = "仅显示预览"
+        ))
+        db.markdownFileDao().insert(MarkdownFileEntity(
+            uri = pinnedUri, name = "原置顶笔记", path = "pinned.md", size = 100, libraryId = "b",
+            lastModified = day.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            contentPreview = "原置顶", contentText = "原置顶", pinnedLibraryId = "b"
         ))
         files = TestFiles()
     }
@@ -85,7 +91,7 @@ class NoteListActionsTest {
                 NoteListViewModel::class.java -> NoteListViewModel(
                     db.markdownFileDao(), libraries, SavedStateHandle(mapOf("date" to selectedDay?.toString()))
                 )
-                NoteListActionsViewModel::class.java -> NoteListActionsViewModel(files, libraries, bus)
+                NoteListActionsViewModel::class.java -> NoteListActionsViewModel(files, libraries, bus, db.markdownFileDao())
                 QuickNoteViewModel::class.java -> QuickNoteViewModel(
                     CreateMarkdownFileUseCase(files, GenerateFileNameUseCase()), bus,
                     AttachmentRepositoryImpl(instrument.targetContext, libraries, db.markdownFileDao()), files
@@ -109,9 +115,29 @@ class NoteListActionsTest {
         waitForText("回顾笔记")
         compose.onNodeWithText("记录到：工作库").assertIsDisplayed()
         menu("回顾笔记")
-        listOf("复制内容", "分享", "重命名", "编辑", "删除", "取消").forEach {
+        listOf("复制内容", "分享", "置顶", "重命名", "编辑", "删除", "取消").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
+        compose.onNodeWithText("置顶").performClick()
+        compose.onNodeWithText("替换置顶笔记？").assertIsDisplayed()
+        compose.onNodeWithText("「原置顶笔记」已置顶。继续后将改为置顶「回顾笔记」。").assertIsDisplayed()
+        compose.onNodeWithText("取消").performClick()
+        compose.waitForIdle()
+        assertEquals("b", runBlocking { db.markdownFileDao().getFileByUri(pinnedUri)?.pinnedLibraryId })
+        assertEquals(null, runBlocking { db.markdownFileDao().getFileByUri(noteUri)?.pinnedLibraryId })
+
+        menu("回顾笔记")
+        compose.onNodeWithText("置顶").performClick()
+        compose.onNodeWithText("替换").performClick()
+        compose.waitUntil(5_000) { runBlocking { db.markdownFileDao().getFileByUri(noteUri)?.pinnedLibraryId == "b" } }
+        assertEquals(null, runBlocking { db.markdownFileDao().getFileByUri(pinnedUri)?.pinnedLibraryId })
+        compose.waitForIdle()
+        menu("回顾笔记")
+        compose.onNodeWithText("取消置顶").assertIsDisplayed()
+        compose.onNodeWithText("取消置顶").performClick()
+        compose.waitUntil(5_000) { runBlocking { db.markdownFileDao().getFileByUri(noteUri)?.pinnedLibraryId == null } }
+        compose.waitForIdle()
+        menu("回顾笔记")
         compose.onNodeWithText("复制内容").performClick()
         compose.waitUntil(5_000) { files.readUri == noteUri }
         compose.waitForIdle()

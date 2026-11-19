@@ -75,6 +75,35 @@ class TagIndexInstrumentedTest {
         assertTrue(tags.observeReferences().first().isEmpty())
     }
 
+    @Test fun pinIsUniquePerLibraryAndSurvivesReindexAndUriRename(): Unit = runBlocking {
+        writer.insert(note("1", "a", "普通内容", 10))
+        writer.insert(note("2", "a", "另一条", 20))
+        writer.insert(note("3", "b", "其他库", 30))
+
+        assertEquals(MarkdownFileDao.PinToggleResult.Pinned, files.togglePin("1"))
+        assertEquals(
+            MarkdownFileDao.PinToggleResult.ConfirmationRequired(
+                MarkdownFileDao.PinnedNote("1", "1")
+            ),
+            files.togglePin("2")
+        )
+        assertEquals(MarkdownFileDao.PinToggleResult.Pinned, files.togglePin("2", "1"))
+        assertEquals(MarkdownFileDao.PinToggleResult.Pinned, files.togglePin("3"))
+        assertNull(files.getFileByUri("1")?.pinnedLibraryId)
+        assertEquals("a", files.getFileByUri("2")?.pinnedLibraryId)
+        assertEquals("b", files.getFileByUri("3")?.pinnedLibraryId)
+
+        writer.update(checkNotNull(files.getFileByUri("2")).copy(contentText = "重建索引"))
+        assertEquals("a", files.getFileByUri("2")?.pinnedLibraryId)
+
+        val old = checkNotNull(files.getFileByUri("2"))
+        writer.migrateUri("2", old.copy(uri = "2-renamed"), files.getNoteTags("2"))
+        assertNull(files.getFileByUri("2"))
+        assertEquals("a", files.getFileByUri("2-renamed")?.pinnedLibraryId)
+        assertEquals(MarkdownFileDao.PinToggleResult.Unpinned, files.togglePin("2-renamed"))
+        assertNull(files.getFileByUri("2-renamed")?.pinnedLibraryId)
+    }
+
     @Test fun manualParentsCanBeReleasedWithoutDeletingTheirChildren(): Unit = runBlocking {
         val repo = TagRepository(database)
         repo.add("读书")

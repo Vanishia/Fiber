@@ -30,7 +30,8 @@ import com.bird.fiber.utils.MarkdownUtils
     ],
     indices = [
         Index(value = ["library_id"]),
-        Index(value = ["last_modified"])
+        Index(value = ["last_modified"]),
+        Index(value = ["pinned_library_id"], unique = true)
     ]
 )
 data class MarkdownFileEntity(
@@ -114,7 +115,11 @@ data class MarkdownFileEntity(
     val isDeleted: Int = 0,
 
     @ColumnInfo(name = "tag_index_version", defaultValue = "0")
-    val tagIndexVersion: Int = 0
+    val tagIndexVersion: Int = 0,
+
+    /** Non-null only for the one pinned note in a library; the unique index enforces that invariant. */
+    @ColumnInfo(name = "pinned_library_id")
+    val pinnedLibraryId: String? = null
 )
 
 /**
@@ -130,7 +135,8 @@ fun MarkdownFileEntity.toMarkdownFileMeta(): MarkdownFileMeta {
         preview = contentPreview,
         hasImage = hasImage,
         firstImagePath = firstImagePath,
-        libraryId = libraryId
+        libraryId = libraryId,
+        isPinned = pinnedLibraryId == libraryId
     )
 }
 
@@ -152,7 +158,8 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "first_image_path") val firstImagePath: String = "",
     @ColumnInfo(name = "library_id") val libraryId: String,
     @ColumnInfo(name = "library_name") val libraryName: String?,
-    @ColumnInfo(name = "match_snippet") val matchSnippet: String? = null
+    @ColumnInfo(name = "match_snippet") val matchSnippet: String? = null,
+    @ColumnInfo(name = "pinned_library_id") val pinnedLibraryId: String? = null
 )
 
 data class MarkdownIndexSnapshot(
@@ -206,6 +213,7 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         firstImagePath = firstImagePath,
         libraryId = libraryId,
         libraryName = libraryName.orEmpty(),
+        isPinned = pinnedLibraryId == libraryId,
         // 命中片段截取自原始 Markdown 正文，转为纯文本后再展示
         matchSnippet = matchSnippet
             ?.takeIf { it.isNotBlank() }

@@ -26,7 +26,8 @@ data class MarkdownFileMeta(
     val firstImagePath: String = "",
     val libraryId: String? = null,
     val libraryName: String = "",
-    val matchSnippet: String? = null
+    val matchSnippet: String? = null,
+    val isPinned: Boolean = false
 )
 
 /**

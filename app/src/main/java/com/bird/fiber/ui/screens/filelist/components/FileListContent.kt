@@ -93,6 +93,7 @@ fun FileListContent(
     onCopyRequest: (String, String) -> Unit = { _, _ -> },
     onShareRequest: (String, String) -> Unit = { _, _ -> },
     onRenameRequest: (String, String) -> Unit = { _, _ -> },
+    onTogglePinRequest: (String) -> Unit = {},
     onMenuClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onCreateClick: () -> Unit = {},
@@ -211,6 +212,10 @@ fun FileListContent(
         },
         onRename = {
             selectedFile?.let { onRenameRequest(it.name.removeSuffix(".md"), it.uri) }
+        },
+        isPinned = selectedFile?.isPinned == true,
+        onTogglePin = {
+            selectedFile?.let { onTogglePinRequest(it.uri) }
         },
         sheetState = sheetState
     )

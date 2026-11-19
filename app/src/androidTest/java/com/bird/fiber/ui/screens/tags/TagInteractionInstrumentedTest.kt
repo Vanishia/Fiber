@@ -128,7 +128,7 @@ class TagInteractionInstrumentedTest {
             }
             val backfill = TagBackfillCoordinator(FileIndexer(db.markdownFileDao()), context.contentResolver, testScope)
             val vm = TagNotesViewModel(SavedStateHandle(mapOf("tagPath" to "项目")), TagRepository(db), backfill)
-            val actions = NoteListActionsViewModel(UnusedFiles(), LibraryRepository(db.libraryDao()), EventBus())
+            val actions = NoteListActionsViewModel(UnusedFiles(), LibraryRepository(db.libraryDao()), EventBus(), db.markdownFileDao())
             models.put("tags", vm)
             models.put("actions", actions)
             var opened by mutableStateOf(false)

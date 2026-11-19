@@ -5,6 +5,7 @@ import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.toTarget
 import com.bird.fiber.data.model.FileError
 import com.bird.fiber.data.model.FileResult
@@ -32,6 +33,7 @@ class NoteListActionsViewModelTest {
     private val files = mockk<FileRepository>()
     private val libraries = mockk<LibraryRepository>()
     private val bus = mockk<EventBus>(relaxed = true)
+    private val markdownFileDao = mockk<MarkdownFileDao>()
     private val libraryA = LibraryEntity("a", "工作", "content://test/a", 0)
     private val libraryB = LibraryEntity("b", "生活", "content://test/b", 0)
     private val active = MutableStateFlow<LibraryEntity?>(libraryA)
@@ -43,7 +45,7 @@ class NoteListActionsViewModelTest {
         every { libraries.getActiveLibrary() } returns active
         coEvery { libraries.getLibraryById("b") } returns libraryB
         coEvery { libraries.switchLibrary(any()) } returns Unit
-        actions = NoteListActionsViewModel(files, libraries, bus)
+        actions = NoteListActionsViewModel(files, libraries, bus, markdownFileDao)
     }
 
     @After fun tearDown() { Dispatchers.resetMain() }
@@ -73,6 +75,39 @@ class NoteListActionsViewModelTest {
             assertEquals(NoteListActionEvent.OpenFile(note.uri, false), awaitItem())
         }
         coVerify(exactly = 0) { libraries.switchLibrary(any()) }
+    }
+
+    @Test fun `已有置顶时先要求确认且确认后替换`() = runTest {
+        val pinned = MarkdownFileDao.PinnedNote("content://test/b/pinned", "原置顶笔记.md")
+        coEvery { markdownFileDao.togglePin(note.uri, null) } returns
+            MarkdownFileDao.PinToggleResult.ConfirmationRequired(pinned)
+        coEvery { markdownFileDao.togglePin(note.uri, pinned.uri) } returns
+            MarkdownFileDao.PinToggleResult.Pinned
+        actions.events.test {
+            actions.togglePin(note)
+            assertEquals(NoteListActionsViewModel.PinReplacement(note, pinned), actions.pinReplacement.value)
+            expectNoEvents()
+
+            actions.confirmPinReplacement()
+            assertEquals(NoteListActionEvent.Message("已置顶「笔记」"), awaitItem())
+        }
+        assertEquals(null, actions.pinReplacement.value)
+        coVerify { markdownFileDao.togglePin(note.uri, null) }
+        coVerify { markdownFileDao.togglePin(note.uri, pinned.uri) }
+        coVerify(exactly = 0) { files.renameFile(any(), any()) }
+        coVerify(exactly = 0) { files.saveFileContent(any(), any()) }
+    }
+
+    @Test fun `取消替换确认不修改置顶`() = runTest {
+        val pinned = MarkdownFileDao.PinnedNote("content://test/b/pinned", "原置顶笔记.md")
+        coEvery { markdownFileDao.togglePin(note.uri, null) } returns
+            MarkdownFileDao.PinToggleResult.ConfirmationRequired(pinned)
+        actions.togglePin(note)
+        actions.dismissPinReplacement()
+
+        assertEquals(null, actions.pinReplacement.value)
+        coVerify(exactly = 1) { markdownFileDao.togglePin(note.uri, null) }
+        coVerify(exactly = 0) { markdownFileDao.togglePin(note.uri, pinned.uri) }
     }
 
     @Test fun `切库失败不进入可能使用错误附件目录的编辑器`() = runTest {

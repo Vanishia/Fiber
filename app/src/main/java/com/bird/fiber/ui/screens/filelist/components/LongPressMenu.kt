@@ -2,6 +2,8 @@ package com.bird.fiber.ui.screens.filelist.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,7 +44,7 @@ import timber.log.Timber
  * 长按菜单 Bottom Sheet
  *
  * 从底部弹出，符合手指热区操作习惯
- * 包含：复制内容、分享、重命名、编辑、删除、取消 六个选项
+ * 包含：复制内容、分享、置顶、重命名、编辑、删除、取消
  *
  * @param isVisible 是否显示菜单
  * @param onDismiss 关闭菜单回调
@@ -62,7 +65,9 @@ fun LongPressMenuBottomSheet(
     onCopy: () -> Unit = {},
     onShare: () -> Unit = {},
     onRename: () -> Unit = {},
-    sheetState: SheetState = rememberModalBottomSheetState()
+    isPinned: Boolean = false,
+    onTogglePin: () -> Unit = {},
+    sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
     if (!isVisible) return
 
@@ -80,6 +85,8 @@ fun LongPressMenuBottomSheet(
             onCopy = onCopy,
             onShare = onShare,
             onRename = onRename,
+            isPinned = isPinned,
+            onTogglePin = onTogglePin,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -118,11 +125,14 @@ private fun LongPressMenuContent(
     onCopy: () -> Unit = {},
     onShare: () -> Unit = {},
     onRename: () -> Unit = {},
+    isPinned: Boolean = false,
+    onTogglePin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -158,6 +168,18 @@ private fun LongPressMenuContent(
                 Timber.d("菜单点击：分享")
                 onDismiss()
                 onShare()
+            }
+        )
+
+        ActionButton(
+            icon = Icons.Default.PushPin,
+            text = if (isPinned) "取消置顶" else "置顶",
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = {
+                Timber.d(if (isPinned) "菜单点击：取消置顶" else "菜单点击：置顶")
+                onDismiss()
+                onTogglePin()
             }
         )
 

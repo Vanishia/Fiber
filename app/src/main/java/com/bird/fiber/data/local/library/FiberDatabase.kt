@@ -22,7 +22,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TagEntity::class,
         NoteTagEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class FiberDatabase : RoomDatabase() {
@@ -51,6 +51,13 @@ abstract class FiberDatabase : RoomDatabase() {
                     FOREIGN KEY(note_uri) REFERENCES markdown_files(uri) ON DELETE CASCADE,
                     FOREIGN KEY(tag_path) REFERENCES tags(path) ON DELETE CASCADE)""")
                 database.execSQL("CREATE INDEX IF NOT EXISTS index_note_tags_tag_path ON note_tags(tag_path)")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE markdown_files ADD COLUMN pinned_library_id TEXT")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_markdown_files_pinned_library_id ON markdown_files(pinned_library_id)")
             }
         }
 
@@ -137,7 +144,7 @@ abstract class FiberDatabase : RoomDatabase() {
                     FiberDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
 
                 INSTANCE = instance

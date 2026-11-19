@@ -19,6 +19,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface MarkdownFileDao {
 
+    data class PinnedNote(val uri: String, val name: String)
+
+    sealed interface PinToggleResult {
+        data object Pinned : PinToggleResult
+        data object Unpinned : PinToggleResult
+        data class ConfirmationRequired(val pinnedNote: PinnedNote) : PinToggleResult
+    }
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTag(tag: TagEntity)
 
@@ -33,6 +41,9 @@ interface MarkdownFileDao {
 
     @Query("SELECT tag_index_version FROM markdown_files WHERE uri = :uri")
     suspend fun getTagIndexVersion(uri: String): Int?
+
+    @Query("SELECT pinned_library_id FROM markdown_files WHERE uri = :uri")
+    suspend fun getPinnedLibraryId(uri: String): String?
 
     @Query("SELECT COUNT(*) FROM markdown_files WHERE is_deleted = 0 AND tag_index_version < :version")
     suspend fun countPendingTags(version: Int): Int
@@ -49,7 +60,9 @@ interface MarkdownFileDao {
             "标签索引来自较新版本，请更新应用后重试"
         }
         // REPLACE cascades old links; the complete replacement is in this same transaction.
-        insert(file.copy(tagIndexVersion = TagParser.CURRENT_VERSION))
+        // Read the current database flag so a scan or stale save snapshot cannot reset a pin.
+        val pinnedLibraryId = getPinnedLibraryId(file.uri)?.takeIf { it == file.libraryId }
+        insert(file.copy(tagIndexVersion = TagParser.CURRENT_VERSION, pinnedLibraryId = pinnedLibraryId))
         val now = System.currentTimeMillis()
         tags.forEach { insertTag(TagEntity(it.path, it.displayPath, now)) }
         insertNoteTags(tags.map { NoteTagEntity(file.uri, it.path) })
@@ -57,15 +70,25 @@ interface MarkdownFileDao {
 
     @Transaction
     suspend fun migrateUri(oldUri: String, file: MarkdownFileEntity, links: List<NoteTagEntity>) {
-        insert(file)
+        val wasPinned = getPinnedLibraryId(oldUri) == file.libraryId
+        insert(file.copy(pinnedLibraryId = null))
         insertNoteTags(links.map { it.copy(noteUri = file.uri) })
         if (oldUri != file.uri) delete(oldUri)
+        if (wasPinned) {
+            clearPinnedNote(file.libraryId)
+            setPinnedNote(file.uri, file.libraryId)
+        }
     }
 
     @Transaction
     suspend fun replaceUriIndex(oldUri: String, file: MarkdownFileEntity, tags: List<ParsedTag>) {
+        val wasPinned = getPinnedLibraryId(oldUri) == file.libraryId
         writeTagIndex(file, tags)
         if (oldUri != file.uri) delete(oldUri)
+        if (wasPinned) {
+            clearPinnedNote(file.libraryId)
+            setPinnedNote(file.uri, file.libraryId)
+        }
     }
 
     /**
@@ -94,6 +117,32 @@ interface MarkdownFileDao {
     @Query("DELETE FROM markdown_files WHERE uri = :uri")
     suspend fun delete(uri: String)
 
+    @Transaction
+    suspend fun togglePin(uri: String, confirmedPinnedUri: String? = null): PinToggleResult {
+        val file = checkNotNull(getFileByUri(uri)) { "笔记已不存在，请刷新列表后重试" }
+        check(file.isDeleted == 0) { "笔记已删除，无法置顶" }
+        if (file.pinnedLibraryId == file.libraryId) {
+            if (confirmedPinnedUri != null) return PinToggleResult.Pinned
+            clearPinnedNote(file.libraryId)
+            return PinToggleResult.Unpinned
+        }
+        val pinnedNote = getPinnedNote(file.libraryId)
+        if (pinnedNote != null && pinnedNote.uri != confirmedPinnedUri) {
+            return PinToggleResult.ConfirmationRequired(pinnedNote)
+        }
+        clearPinnedNote(file.libraryId)
+        return if (setPinnedNote(uri, file.libraryId) > 0) PinToggleResult.Pinned else PinToggleResult.Unpinned
+    }
+
+    @Query("UPDATE markdown_files SET pinned_library_id = NULL WHERE pinned_library_id = :libraryId")
+    suspend fun clearPinnedNote(libraryId: String)
+
+    @Query("UPDATE markdown_files SET pinned_library_id = :libraryId WHERE uri = :uri AND library_id = :libraryId AND is_deleted = 0")
+    suspend fun setPinnedNote(uri: String, libraryId: String): Int
+
+    @Query("SELECT uri, name FROM markdown_files WHERE library_id = :libraryId AND pinned_library_id = :libraryId AND is_deleted = 0 LIMIT 1")
+    suspend fun getPinnedNote(libraryId: String): PinnedNote?
+
     @Query("DELETE FROM markdown_files WHERE uri IN (:uris)")
     suspend fun deleteByUris(uris: List<String>)
 
@@ -111,7 +160,7 @@ interface MarkdownFileDao {
     @Query("""
         SELECT * FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
-        ORDER BY last_modified DESC
+        ORDER BY CASE WHEN pinned_library_id = library_id THEN 0 ELSE 1 END, last_modified DESC
     """)
     fun getFilesByLibrary(libraryId: String): PagingSource<Int, MarkdownFileEntity>
 
@@ -136,11 +185,11 @@ interface MarkdownFileDao {
      * 获取指定库的文件摘要（不含 content_text，性能优化）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
-        ORDER BY last_modified DESC
+        ORDER BY CASE WHEN pinned_library_id = library_id THEN 0 ELSE 1 END, last_modified DESC
     """)
     fun getFilesByLibrarySummary(libraryId: String): PagingSource<Int, MarkdownFileSummary>
 
@@ -151,7 +200,7 @@ interface MarkdownFileDao {
      * 共 200 字符，非开头处加省略号前缀）；仅标题/路径命中时回退为 content_preview
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -174,7 +223,7 @@ interface MarkdownFileDao {
     fun searchFilesSummary(libraryId: String, query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -197,7 +246,7 @@ interface MarkdownFileDao {
     fun searchFilesByRelevance(libraryId: String, query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -220,7 +269,7 @@ interface MarkdownFileDao {
     fun searchAllFilesByRelevance(query: String, fromMillis: Long?, toMillis: Long?): PagingSource<Int, MarkdownFileSummary>
 
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -320,7 +369,7 @@ interface MarkdownFileDao {
      * 让沉底的旧碎片有均等机会重新浮现
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -333,7 +382,7 @@ interface MarkdownFileDao {
      * 随机获取一条文件摘要（用于"随机漫步"，指定库范围）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -372,7 +421,7 @@ interface MarkdownFileDao {
      * 获取所有库的文件摘要（"全部笔记"页面，按修改时间倒序）
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -391,7 +440,7 @@ interface MarkdownFileDao {
      * SQL 无法判断日期合法性，会被两个分支同时排除
      */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -414,7 +463,7 @@ interface MarkdownFileDao {
 
     /** 每日笔记内搜索，与 getFilesByDaySummary 使用相同的日期归档规则。 */
     @Query("""
-        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id,
+        SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN :query != '' AND instr(lower(content_text), lower(:query)) > 0 THEN

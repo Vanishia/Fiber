@@ -6,6 +6,7 @@ import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.local.library.LibraryRepository
+import com.bird.fiber.data.local.library.MarkdownFileDao
 import com.bird.fiber.data.local.library.toTarget
 import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.model.FileError
@@ -16,6 +17,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -27,10 +30,19 @@ import kotlinx.coroutines.launch
 class NoteListActionsViewModel @Inject constructor(
     private val files: FileRepository,
     private val libraries: LibraryRepository,
-    private val eventBus: EventBus
+    private val eventBus: EventBus,
+    private val markdownFileDao: MarkdownFileDao
 ) : ViewModel() {
+    data class PinReplacement(
+        val file: MarkdownFileMeta,
+        val pinnedNote: MarkdownFileDao.PinnedNote
+    )
+
     val activeLibrary = libraries.getActiveLibrary()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _pinReplacement = MutableStateFlow<PinReplacement?>(null)
+    val pinReplacement = _pinReplacement.asStateFlow()
 
     private val eventChannel = Channel<NoteListActionEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
@@ -52,6 +64,35 @@ class NoteListActionsViewModel @Inject constructor(
             is FileResult.Error -> message(result.error.toUserMessage())
             FileResult.Loading -> Unit
         }
+    }
+
+    fun togglePin(file: MarkdownFileMeta, confirmedPinnedUri: String? = null) = action {
+        if (file.libraryId == null) {
+            message("找不到笔记所属库，无法置顶")
+            return@action
+        }
+        when (val result = markdownFileDao.togglePin(file.uri, confirmedPinnedUri)) {
+            MarkdownFileDao.PinToggleResult.Pinned -> {
+                _pinReplacement.value = null
+                message("已置顶「${file.name.removeSuffix(".md")}」")
+            }
+            MarkdownFileDao.PinToggleResult.Unpinned -> {
+                _pinReplacement.value = null
+                message("已取消置顶")
+            }
+            is MarkdownFileDao.PinToggleResult.ConfirmationRequired -> {
+                _pinReplacement.value = PinReplacement(file, result.pinnedNote)
+            }
+        }
+    }
+
+    fun confirmPinReplacement() {
+        val replacement = _pinReplacement.value ?: return
+        togglePin(replacement.file, replacement.pinnedNote.uri)
+    }
+
+    fun dismissPinReplacement() {
+        _pinReplacement.value = null
     }
 
     fun deleteFile(file: MarkdownFileMeta) = action {
