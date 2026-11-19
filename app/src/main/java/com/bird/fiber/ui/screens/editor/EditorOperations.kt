@@ -3,7 +3,7 @@ package com.bird.fiber.ui.screens.editor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 
-internal enum class EditorFormat { Heading, Bold, BulletList, TaskList, CodeBlock, Quote, Italic }
+internal enum class EditorFormat { Heading, Bold, BulletList, TaskList, CodeBlock, Quote, Italic, Tag }
 
 /** 所有偏移均为 TextFieldValue 的 UTF-16 偏移，保留反向选区和原有换行符。 */
 internal object EditorOperations {
@@ -13,6 +13,7 @@ internal object EditorOperations {
     }
 
     fun format(value: TextFieldValue, format: EditorFormat): TextFieldValue = when (format) {
+        EditorFormat.Tag -> replace(value, "#")
         EditorFormat.Bold -> wrap(value, "**")
         EditorFormat.Italic -> wrap(value, "*")
         EditorFormat.Heading -> lines(value) { line ->

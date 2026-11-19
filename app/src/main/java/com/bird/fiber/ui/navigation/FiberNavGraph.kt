@@ -171,7 +171,8 @@ fun FiberNavGraph(
             EditorScreen(
                 fileUri = fileUri,
                 onClose = ::popFromUser,
-                initialPreviewMode = initialPreviewMode
+                initialPreviewMode = initialPreviewMode,
+                onTagClick = { path -> navigateFromUser(FiberRoute.tagNotes(path)) }
             )
         }
 

@@ -7,6 +7,22 @@ import org.junit.Test
 
 class EditorOperationsTest {
     @Test
+    fun tagButtonReplacesSelectionWithAsciiHashAsOneUndoStep() {
+        val initial = TextFieldValue("前标签后", TextRange(3, 1))
+        val session = EditorSession()
+        session.reset(initial)
+        session.perform { EditorOperations.format(it, EditorFormat.Tag) }
+        assertEquals("前#后", session.value.text)
+        assertEquals(TextRange(2), session.value.selection)
+        session.undo()
+        assertEquals(initial, session.value)
+        session.redo()
+        assertEquals("前#后", session.value.text)
+        val insertion = EditorOperations.format(TextFieldValue("正文", TextRange(2)), EditorFormat.Tag)
+        assertEquals("正文#", insertion.text)
+        assertEquals(TextRange(3), insertion.selection)
+    }
+    @Test
     fun boldPreservesReversedChineseAndEmojiSelection_andToggles() {
         val value = TextFieldValue("前中文😀后", TextRange(5, 1))
         val bold = EditorOperations.format(value, EditorFormat.Bold)

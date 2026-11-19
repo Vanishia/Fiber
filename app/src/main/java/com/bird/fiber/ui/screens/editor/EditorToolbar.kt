@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +53,7 @@ internal fun EditorToolbar(
             EditorToolbarButton(Icons.AutoMirrored.Filled.Redo, R.string.editor_toolbar_redo, enabled && canRedo, onRedo)
             listOf(
                 Triple(Icons.Default.Title, R.string.editor_toolbar_heading, EditorFormat.Heading),
+                Triple(Icons.Default.Tag, R.string.editor_toolbar_tag, EditorFormat.Tag),
                 Triple(Icons.Default.FormatBold, R.string.editor_toolbar_bold, EditorFormat.Bold),
                 Triple(Icons.AutoMirrored.Filled.FormatListBulleted, R.string.editor_toolbar_bullet_list, EditorFormat.BulletList),
                 Triple(Icons.Default.CheckBox, R.string.editor_toolbar_task_list, EditorFormat.TaskList),

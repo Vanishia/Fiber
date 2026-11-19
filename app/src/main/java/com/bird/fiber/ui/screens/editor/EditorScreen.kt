@@ -35,11 +35,13 @@ fun EditorScreen(
     fileUri: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onTagClick: (String) -> Unit = {},
     initialPreviewMode: Boolean = true,
     viewModel: EditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val renderState by viewModel.renderState.collectAsStateWithLifecycle()
+    val noteTags by viewModel.noteTags.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navigationBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -118,6 +120,8 @@ fun EditorScreen(
                 previewError = renderState.error,
                 onRetryPreview = viewModel::retryPreview,
                 applyPreview = viewModel::applyPreview,
+                noteTags = noteTags,
+                onTagClick = onTagClick,
                 onContentChange = viewModel::onTextValueChange,
                 onImageSelected = viewModel::addImage,
                 captureImageInsertion = viewModel::captureImageInsertion,

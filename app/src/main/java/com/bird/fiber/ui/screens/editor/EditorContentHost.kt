@@ -18,6 +18,7 @@ import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bird.fiber.data.local.library.NoteTagLabel
 
 /**
  * 编辑/预览之间共享的滚动比例
@@ -37,6 +38,8 @@ internal fun EditorContentHost(
     previewError: String?,
     onRetryPreview: () -> Unit,
     applyPreview: (android.widget.TextView, Spanned) -> Unit,
+    noteTags: List<NoteTagLabel>,
+    onTagClick: (String) -> Unit,
     onContentChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
     onImageSelected: (String, EditorInsertionPoint) -> Unit,
     captureImageInsertion: () -> EditorInsertionPoint?,
@@ -95,6 +98,8 @@ internal fun EditorContentHost(
                 renderedMarkdown = renderedMarkdown,
                 isRendering = isRendering,
                 applyPreview = applyPreview,
+                noteTags = noteTags,
+                onTagClick = onTagClick,
                 topContentInset = topContentInset,
                 bottomContentInset = bottomContentInset,
                 initialScrollFraction = scrollFractionHolder.fraction,

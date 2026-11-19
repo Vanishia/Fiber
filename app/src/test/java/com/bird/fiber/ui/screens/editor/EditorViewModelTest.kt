@@ -9,6 +9,7 @@ import com.bird.fiber.data.model.FileResult
 import com.bird.fiber.data.repository.FileRepository
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.local.TagRepository
 import com.bird.fiber.data.model.Attachment
 import com.bird.fiber.data.model.LibraryTarget
 import androidx.compose.ui.text.TextRange
@@ -17,6 +18,7 @@ import com.bird.fiber.utils.TestCoroutineRule
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -45,6 +47,7 @@ class EditorViewModelTest {
     private lateinit var eventBus: EventBus
     private lateinit var renderMarkdownUseCase: RenderMarkdownUseCase
     private lateinit var attachmentRepository: AttachmentRepository
+    private lateinit var tagRepository: TagRepository
     private lateinit var viewModel: EditorViewModel
 
     @Before
@@ -53,12 +56,15 @@ class EditorViewModelTest {
         eventBus = mockk(relaxed = true)
         renderMarkdownUseCase = mockk(relaxed = true)
         attachmentRepository = mockk(relaxed = true)
+        tagRepository = mockk(relaxed = true)
+        every { tagRepository.noteTags(any()) } returns flowOf(emptyList())
         every { renderMarkdownUseCase.render(any<com.bird.fiber.domain.markdown.DocumentSnapshot>()) } returns mockk<Spanned>(relaxed = true)
         viewModel = EditorViewModel(
             fileRepository,
             eventBus,
             renderMarkdownUseCase,
             attachmentRepository,
+            tagRepository,
             coroutineRule.testDispatcher
         )
     }

@@ -13,14 +13,21 @@ import com.bird.fiber.data.event.AppEvent
 import com.bird.fiber.data.event.EventBus
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
 import com.bird.fiber.data.repository.AttachmentRepository
+import com.bird.fiber.data.local.TagRepository
+import com.bird.fiber.data.local.library.NoteTagLabel
 import com.bird.fiber.domain.markdown.DocumentSnapshot
 import com.bird.fiber.utils.UriHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -29,12 +36,14 @@ import javax.inject.Inject
  * 编辑器 ViewModel
  */
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class EditorViewModel : ViewModel {
 
     private val fileRepository: FileRepository
     private val eventBus: EventBus
     private val renderMarkdownUseCase: RenderMarkdownUseCase
     private val attachmentRepository: AttachmentRepository
+    private val tagRepository: TagRepository
     private val renderDispatcher: CoroutineDispatcher
 
     @Inject
@@ -42,20 +51,23 @@ class EditorViewModel : ViewModel {
         fileRepository: FileRepository,
         eventBus: EventBus,
         renderMarkdownUseCase: RenderMarkdownUseCase,
-        attachmentRepository: AttachmentRepository
-    ) : this(fileRepository, eventBus, renderMarkdownUseCase, attachmentRepository, Dispatchers.Default)
+        attachmentRepository: AttachmentRepository,
+        tagRepository: TagRepository
+    ) : this(fileRepository, eventBus, renderMarkdownUseCase, attachmentRepository, tagRepository, Dispatchers.Default)
 
     internal constructor(
         fileRepository: FileRepository,
         eventBus: EventBus,
         renderMarkdownUseCase: RenderMarkdownUseCase,
         attachmentRepository: AttachmentRepository,
+        tagRepository: TagRepository,
         renderDispatcher: CoroutineDispatcher
     ) : super() {
         this.fileRepository = fileRepository
         this.eventBus = eventBus
         this.renderMarkdownUseCase = renderMarkdownUseCase
         this.attachmentRepository = attachmentRepository
+        this.tagRepository = tagRepository
         this.renderDispatcher = renderDispatcher
     }
 
@@ -65,7 +77,13 @@ class EditorViewModel : ViewModel {
     private val preview by lazy { PreviewCoordinator(viewModelScope, renderMarkdownUseCase, renderDispatcher) }
     val renderState: StateFlow<EditorRenderState> get() = preview.state
 
-    private var currentFileUri: String? = null
+    private val currentFileUriState = MutableStateFlow<String?>(null)
+    private var currentFileUri: String?
+        get() = currentFileUriState.value
+        set(value) { currentFileUriState.value = value }
+    val noteTags: StateFlow<List<NoteTagLabel>> = currentFileUriState
+        .flatMapLatest { uri -> uri?.let(tagRepository::noteTags) ?: flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private var originalContent: String = ""
     private var generation = 0L
     private var hasLoadedDocument = false
