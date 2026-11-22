@@ -18,6 +18,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -148,6 +149,15 @@ fun WaterfallNoteCard(
                             imageVector = Icons.Default.PushPin,
                             contentDescription = "已置顶",
                             tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    if (file.hasTags) {
+                        Icon(
+                            imageVector = Icons.Rounded.Numbers,
+                            contentDescription = "包含标签",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(Modifier.width(4.dp))

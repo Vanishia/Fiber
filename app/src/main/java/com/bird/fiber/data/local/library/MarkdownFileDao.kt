@@ -186,6 +186,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -201,6 +202,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -224,6 +226,7 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -247,6 +250,7 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -270,6 +274,7 @@ interface MarkdownFileDao {
 
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN instr(lower(content_text), lower(:query)) > 0 THEN
@@ -370,6 +375,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -383,6 +389,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE library_id = :libraryId AND is_deleted = 0
@@ -422,6 +429,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -441,6 +449,7 @@ interface MarkdownFileDao {
      */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name
         FROM markdown_files
         WHERE is_deleted = 0
@@ -464,6 +473,7 @@ interface MarkdownFileDao {
     /** 每日笔记内搜索，与 getFilesByDaySummary 使用相同的日期归档规则。 */
     @Query("""
         SELECT uri, name, path, last_modified, size, content_preview, has_image, first_image_path, library_id, pinned_library_id,
+               EXISTS (SELECT 1 FROM note_tags WHERE note_uri = markdown_files.uri) AS has_tags,
                (SELECT name FROM libraries WHERE id = markdown_files.library_id) AS library_name,
                CASE
                    WHEN :query != '' AND instr(lower(content_text), lower(:query)) > 0 THEN

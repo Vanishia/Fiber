@@ -693,18 +693,24 @@ private fun LineHeightSettingItem(
 
 @Composable
 private fun TypographyPreview() {
-    val poem = remember {
+    val sampleText = remember {
         listOf(
             "山光悦鸟性，潭影空人心。",
             "明月松间照，清泉石上流。",
             "行到水穷处，坐看云起时。",
             "春风又绿江南岸，明月何时照我还。",
             "海上生明月，天涯共此时。"
-        ).random().replace("，", "，\n")
+        ).random() + "\n" + listOf(
+            "滚滚长江东逝水，浪花淘尽英雄。",
+            "长风破浪会有时，直挂云帆济沧海。",
+            "落霞与孤鹜齐飞，秋水共长天一色。",
+            "竹杖芒鞋轻胜马，一蓑烟雨任平生。",
+            "江畔何人初见月，江月何年初照人。"
+        ).random()
     }
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
         Text(
-            text = poem,
+            text = sampleText,
             style = MaterialTheme.typography.bodyLarge.copy(
                 lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * LocalLineHeightScale.current
             ),

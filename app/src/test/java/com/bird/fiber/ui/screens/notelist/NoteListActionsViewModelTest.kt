@@ -43,6 +43,7 @@ class NoteListActionsViewModelTest {
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         every { libraries.getActiveLibrary() } returns active
+        every { libraries.getAllLibraries() } returns MutableStateFlow(listOf(libraryA, libraryB))
         coEvery { libraries.getLibraryById("b") } returns libraryB
         coEvery { libraries.switchLibrary(any()) } returns Unit
         actions = NoteListActionsViewModel(files, libraries, bus, markdownFileDao)
@@ -73,6 +74,30 @@ class NoteListActionsViewModelTest {
         actions.events.test {
             actions.openFile(note, false)
             assertEquals(NoteListActionEvent.OpenFile(note.uri, false), awaitItem())
+        }
+        coVerify(exactly = 0) { libraries.switchLibrary(any()) }
+    }
+
+    @Test fun `选择记录库只切换保存位置不打开笔记`() = runTest {
+        actions.events.test {
+            actions.selectRecordingLibrary(libraryB)
+            expectNoEvents()
+        }
+        coVerify(exactly = 1) { libraries.switchLibrary("b") }
+        coVerify(exactly = 0) { files.createMarkdownFile(any(), any(), any()) }
+    }
+
+    @Test fun `选择当前记录库不重复切库`() = runTest {
+        active.value = libraryB
+        actions.selectRecordingLibrary(libraryB)
+        coVerify(exactly = 0) { libraries.switchLibrary(any()) }
+    }
+
+    @Test fun `记录库已被删除时保留当前库并提示`() = runTest {
+        coEvery { libraries.getLibraryById("b") } returns null
+        actions.events.test {
+            actions.selectRecordingLibrary(libraryB)
+            assertEquals(NoteListActionEvent.Message("笔记库已不存在，请重新选择"), awaitItem())
         }
         coVerify(exactly = 0) { libraries.switchLibrary(any()) }
     }

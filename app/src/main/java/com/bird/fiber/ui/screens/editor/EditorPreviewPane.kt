@@ -1,6 +1,7 @@
 package com.bird.fiber.ui.screens.editor
 
 import android.graphics.drawable.GradientDrawable
+import android.text.SpannableString
 import android.text.Spanned
 import android.util.TypedValue
 import android.view.Gravity
@@ -33,6 +34,8 @@ import com.bird.fiber.R
 import com.bird.fiber.data.local.library.NoteTagLabel
 import com.bird.fiber.ui.theme.LocalFiberSurfaceColors
 import com.bird.fiber.ui.theme.LocalLineHeightScale
+import io.noties.markwon.core.MarkwonTheme
+import io.noties.markwon.core.spans.ThematicBreakSpan
 import kotlin.math.roundToInt
 
 @Composable
@@ -89,7 +92,6 @@ private fun MarkdownPreview(
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
     val tagContainerColor = MaterialTheme.colorScheme.secondaryContainer.toArgb()
     val tagContentColor = MaterialTheme.colorScheme.onSecondaryContainer.toArgb()
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val backgroundColor = LocalFiberSurfaceColors.current.pageBackground.toArgb()
     val textSizePx = with(density) { bodyStyle.fontSize.toPx() }
     // 与编辑视图一致：精确行高 = 字号 × 共用倍数，再叠加设置里的行距缩放
@@ -113,7 +115,7 @@ private fun MarkdownPreview(
     var lastTopInsetPx by remember { mutableStateOf(0) }
     var lastBottomInsetPx by remember { mutableStateOf(0) }
     var lastTags by remember { mutableStateOf<List<NoteTagLabel>>(emptyList()) }
-    var lastTagStyle by remember { mutableStateOf(Triple(0, 0, 0)) }
+    var lastTagStyle by remember { mutableStateOf(0 to 0) }
     // 从编辑切换回来时按滚动比例恢复位置（仅首次设置文本时执行一次）
     var initialFractionApplied by remember { mutableStateOf(false) }
 
@@ -135,12 +137,18 @@ private fun MarkdownPreview(
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             }
 
-            val divider = View(ctx).apply {
+            val divider = TextView(ctx).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    with(density) { 1.dp.roundToPx() }
-                ).apply { topMargin = with(density) { 8.dp.roundToPx() } }
-                setBackgroundColor(dividerColor)
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                includeFontPadding = false
+                // 与 Markdown 的 --- 共用原生 span 和主题，颜色与粗细随正文一致变化。
+                text = SpannableString("\u00a0").apply {
+                    setSpan(ThematicBreakSpan(MarkwonTheme.create(ctx)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                setTextColor(textColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             }
             val tagChips = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -151,19 +159,9 @@ private fun MarkdownPreview(
                 isFillViewport = false
                 addView(tagChips)
             }
-            val tagLabel = TextView(ctx).apply {
-                text = ctx.getString(R.string.editor_preview_tags)
-                gravity = Gravity.CENTER_VERTICAL
-                setTextColor(tagContentColor)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            }
             val tagLine = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(tagLabel, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    tagHeightPx
-                ).apply { marginEnd = tagGapPx })
                 addView(tagScroller, LinearLayout.LayoutParams(
                     0,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -187,7 +185,7 @@ private fun MarkdownPreview(
                 setBackgroundColor(backgroundColor)
                 isVerticalScrollBarEnabled = false
                 addView(document)
-                tag = PreviewViews(textView, tagSection, tagLine, tagChips, tagLabel, divider)
+                tag = PreviewViews(textView, tagSection, tagLine, tagChips, divider)
             }
 
             // 上报滚动比例，供切换到编辑时恢复位置
@@ -230,12 +228,14 @@ private fun MarkdownPreview(
 
             if (lastTextSizePx != textSizePx) {
                 textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+                views.divider.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 lastTextSizePx = textSizePx
                 needsLayout = true
             }
 
             if (lastLineHeightPx != lineHeightPx) {
                 TextViewCompat.setLineHeight(textView, lineHeightPx)
+                TextViewCompat.setLineHeight(views.divider, lineHeightPx)
                 lastLineHeightPx = lineHeightPx
                 needsLayout = true
             }
@@ -248,12 +248,10 @@ private fun MarkdownPreview(
                 needsLayout = true
             }
 
-            val tagStyle = Triple(tagContainerColor, tagContentColor, dividerColor)
+            val tagStyle = tagContainerColor to tagContentColor
             if (lastTags != noteTags || lastTagStyle != tagStyle) {
                 views.tagSection.visibility = if (noteTags.isEmpty()) View.GONE else View.VISIBLE
                 views.tagChips.removeAllViews()
-                views.tagLabel.setTextColor(tagContentColor)
-                views.divider.setBackgroundColor(dividerColor)
                 noteTags.forEach { tag ->
                     val chip = TextView(scrollView.context).apply {
                         text = scrollView.context.getString(R.string.editor_preview_tag_chip, tag.displayPath)
@@ -289,6 +287,7 @@ private fun MarkdownPreview(
             // 颜色变化不需要 requestLayout
             textView.setTextColor(textColor)
             textView.setLinkTextColor(linkColor)
+            views.divider.setTextColor(textColor)
             textView.setBackgroundColor(backgroundColor)
             scrollView.setBackgroundColor(backgroundColor)
 
@@ -305,6 +304,5 @@ private data class PreviewViews(
     val tagSection: LinearLayout,
     val tagLine: LinearLayout,
     val tagChips: LinearLayout,
-    val tagLabel: TextView,
-    val divider: View
+    val divider: TextView
 )

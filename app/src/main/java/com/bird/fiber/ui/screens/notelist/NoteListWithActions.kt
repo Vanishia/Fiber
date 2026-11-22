@@ -1,11 +1,16 @@
 package com.bird.fiber.ui.screens.notelist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -33,6 +38,7 @@ import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.model.MarkdownFileMeta
 import com.bird.fiber.ui.screens.filelist.components.CreateFileDialog
 import com.bird.fiber.ui.screens.main.QuickNoteBar
+import com.bird.fiber.ui.screens.importing.ImportLibraryDialog
 import com.bird.fiber.ui.screens.quicknote.QuickNoteViewModel
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -54,6 +60,7 @@ internal fun NoteListWithActions(
     val title by viewModel.title.collectAsStateWithLifecycle()
     val emptyText by viewModel.emptyText.collectAsStateWithLifecycle()
     val library by actions.activeLibrary.collectAsStateWithLifecycle()
+    val recordingLibraries by actions.recordingLibraries.collectAsStateWithLifecycle()
     val quickNote by quickNotes.uiState.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     val focus = LocalFocusManager.current
@@ -64,6 +71,7 @@ internal fun NoteListWithActions(
     var deleteFile by remember { mutableStateOf<MarkdownFileMeta?>(null) }
     var createInLibrary by remember { mutableStateOf<LibraryEntity?>(null) }
     var createName by remember { mutableStateOf("") }
+    var showRecordingLibraryPicker by remember { mutableStateOf(false) }
     val create: () -> Unit = {
         val target = library
         if (target == null) onAddLibrary() else {
@@ -112,14 +120,32 @@ internal fun NoteListWithActions(
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = library?.let { "记录到：${it.name}" } ?: "请先添加笔记库",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = !quickNote.isSaving && !quickNote.isAddingImage) {
+                                if (recordingLibraries.isEmpty()) onAddLibrary()
+                                else showRecordingLibraryPicker = true
+                            }
+                            .heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = library?.let { "记录到：${it.name}" } ?: "请先添加笔记库",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     IconButton(onClick = create) {
                         Icon(Icons.Default.Create, contentDescription = "新建笔记")
                     }
@@ -148,6 +174,17 @@ internal fun NoteListWithActions(
         onDismissDirectDelete = { deleteFile = null },
         actions = actions
     )
+    if (showRecordingLibraryPicker) {
+        ImportLibraryDialog(
+            fileName = "选择新笔记的保存位置",
+            libraries = recordingLibraries,
+            onSelect = { target ->
+                showRecordingLibraryPicker = false
+                actions.selectRecordingLibrary(target)
+            },
+            onDismiss = { showRecordingLibraryPicker = false }
+        )
+    }
     createInLibrary?.let { target ->
         CreateFileDialog(
             fileName = createName,

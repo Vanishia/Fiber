@@ -75,6 +75,51 @@ class TagIndexInstrumentedTest {
         assertTrue(tags.observeReferences().first().isEmpty())
     }
 
+    @Test fun tagIndicatorsUseIndexedReferencesAcrossSummaryQueriesAndInvalidateOnRemoval(): Unit = runBlocking {
+        writer.insert(note("tagged", "a", "正文 #项目/android #随记"))
+        writer.insert(note("plain", "a", "没有标签的正文"))
+        writer.insert(note("code", "a", "`#代码里的井号`"))
+
+        val sources = listOf<() -> PagingSource<Int, MarkdownFileSummary>>(
+            { files.getFilesByLibrarySummary("a") },
+            { files.getAllFilesSummary() },
+            { files.searchFilesSummary("a", "", null, null) },
+            { files.searchFilesByRelevance("a", "", null, null) },
+            { files.searchAllFilesByRelevance("", null, null) },
+            { files.searchAllFilesByModified("", null, null) },
+            { files.getFilesByDaySummary("none", "none", 0, 100) },
+            { files.searchFilesByDaySummary(null, "", "none", "none", 0, 100, false) }
+        )
+        suspend fun load(source: PagingSource<Int, MarkdownFileSummary>): List<MarkdownFileSummary> {
+            val page = source.load(PagingSource.LoadParams.Refresh(null, 50, false))
+            check(page is PagingSource.LoadResult.Page) { page.toString() }
+            return page.data
+        }
+        sources.forEach { source ->
+            val notes = load(source()).associateBy { it.uri }
+            assertEquals(setOf("tagged", "plain", "code"), notes.keys)
+            assertTrue(checkNotNull(notes["tagged"]).toMarkdownFileMeta().hasTags)
+            assertFalse(checkNotNull(notes["plain"]).toMarkdownFileMeta().hasTags)
+            assertFalse(checkNotNull(notes["code"]).toMarkdownFileMeta().hasTags)
+        }
+        assertTrue(query("项目").single().toMarkdownFileMeta().hasTags)
+        files.delete("plain")
+        files.delete("code")
+        assertTrue(checkNotNull(files.getRandomFileSummary()).hasTags)
+        assertTrue(checkNotNull(files.getRandomFileSummaryByLibrary("a")).hasTags)
+
+        val observed = files.getFilesByLibrarySummary("a")
+        assertTrue(load(observed).single().hasTags)
+        val invalidated = kotlinx.coroutines.CompletableDeferred<Unit>()
+        observed.registerInvalidatedCallback { invalidated.complete(Unit) }
+        files.clearNoteTags("tagged")
+        kotlinx.coroutines.withTimeout(5_000) { invalidated.await() }
+        assertTrue(observed.invalid)
+        sources.forEach { source -> assertFalse(load(source()).single().toMarkdownFileMeta().hasTags) }
+        assertFalse(checkNotNull(files.getRandomFileSummary()).hasTags)
+        assertFalse(checkNotNull(files.getRandomFileSummaryByLibrary("a")).hasTags)
+    }
+
     @Test fun pinIsUniquePerLibraryAndSurvivesReindexAndUriRename(): Unit = runBlocking {
         writer.insert(note("1", "a", "普通内容", 10))
         writer.insert(note("2", "a", "另一条", 20))

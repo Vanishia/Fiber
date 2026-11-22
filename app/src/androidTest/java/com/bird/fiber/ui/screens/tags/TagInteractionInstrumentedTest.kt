@@ -96,6 +96,33 @@ class TagInteractionInstrumentedTest {
         compose.onNode(hasSetTextAction()).assertTextEquals("标签")
     }
 
+    @Test fun noteCardsShowMutedTagIndicatorsOnlyWhenIndexed() {
+        val tagged = MarkdownFileMeta("tagged", "标签笔记", "tagged.md", 10, 0, hasTags = true, isPinned = true)
+        val plain = MarkdownFileMeta("plain", "普通笔记", "plain.md", 10, 0)
+        var hasTags by mutableStateOf(true)
+        compose.setContent {
+            FiberTheme {
+                Column {
+                    com.bird.fiber.ui.screens.filelist.components.FileListItem(
+                        file = tagged.copy(hasTags = hasTags), onClick = {}, swipeEnabled = false
+                    )
+                    com.bird.fiber.ui.screens.filelist.components.WaterfallNoteCard(
+                        file = tagged.copy(hasTags = hasTags), onClick = {}
+                    )
+                    com.bird.fiber.ui.screens.filelist.components.FileListItem(
+                        file = plain, onClick = {}, swipeEnabled = false
+                    )
+                    com.bird.fiber.ui.screens.filelist.components.WaterfallNoteCard(file = plain, onClick = {})
+                }
+            }
+        }
+        compose.onAllNodesWithContentDescription("包含标签").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("已置顶").assertCountEquals(2)
+        compose.runOnIdle { hasTags = false }
+        compose.onAllNodesWithContentDescription("包含标签").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("已置顶").assertCountEquals(2)
+    }
+
     @Test fun encodedRoutePreservesFullUnicodeHierarchy() {
         val path = "读书/心理_android/2026"
         compose.setContent {

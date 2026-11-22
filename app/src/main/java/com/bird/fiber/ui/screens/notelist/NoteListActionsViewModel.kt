@@ -41,12 +41,22 @@ class NoteListActionsViewModel @Inject constructor(
     val activeLibrary = libraries.getActiveLibrary()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val recordingLibraries = libraries.getAllLibraries()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _pinReplacement = MutableStateFlow<PinReplacement?>(null)
     val pinReplacement = _pinReplacement.asStateFlow()
 
     private val eventChannel = Channel<NoteListActionEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
     private var working = false
+
+    fun selectRecordingLibrary(library: LibraryEntity) = action {
+        checkNotNull(libraries.getLibraryById(library.id)) { "笔记库已不存在，请重新选择" }
+        if (libraries.getActiveLibrary().first()?.id != library.id) {
+            libraries.switchLibrary(library.id)
+        }
+    }
 
     fun openFile(file: MarkdownFileMeta, edit: Boolean) = action {
         file.libraryId?.let { libraryId ->

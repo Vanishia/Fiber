@@ -159,7 +159,8 @@ data class MarkdownFileSummary(
     @ColumnInfo(name = "library_id") val libraryId: String,
     @ColumnInfo(name = "library_name") val libraryName: String?,
     @ColumnInfo(name = "match_snippet") val matchSnippet: String? = null,
-    @ColumnInfo(name = "pinned_library_id") val pinnedLibraryId: String? = null
+    @ColumnInfo(name = "pinned_library_id") val pinnedLibraryId: String? = null,
+    @ColumnInfo(name = "has_tags") val hasTags: Boolean = false
 )
 
 data class MarkdownIndexSnapshot(
@@ -214,6 +215,7 @@ fun MarkdownFileSummary.toMarkdownFileMeta(): MarkdownFileMeta {
         libraryId = libraryId,
         libraryName = libraryName.orEmpty(),
         isPinned = pinnedLibraryId == libraryId,
+        hasTags = hasTags,
         // 命中片段截取自原始 Markdown 正文，转为纯文本后再展示
         matchSnippet = matchSnippet
             ?.takeIf { it.isNotBlank() }

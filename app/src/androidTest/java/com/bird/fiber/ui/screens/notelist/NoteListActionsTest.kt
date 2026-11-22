@@ -114,6 +114,18 @@ class NoteListActionsTest {
         }
         waitForText("回顾笔记")
         compose.onNodeWithText("记录到：工作库").assertIsDisplayed()
+        compose.onNodeWithText("记录到：工作库").performClick()
+        compose.onNodeWithText("保存到库").assertIsDisplayed()
+        compose.onNodeWithText("生活库").performClick()
+        waitForText("记录到：生活库")
+        assertEquals(null, opened)
+        compose.onNodeWithText("记录到：生活库").performClick()
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithText("记录到：生活库").assertIsDisplayed()
+        compose.onNodeWithText("记录到：生活库").performClick()
+        compose.onNodeWithText("工作库").performClick()
+        waitForText("记录到：工作库")
+        selectedDay?.let { compose.onNodeWithText(it.toString()).assertIsDisplayed() }
         menu("回顾笔记")
         listOf("复制内容", "分享", "置顶", "重命名", "编辑", "删除", "取消").forEach {
             compose.onNodeWithText(it).assertIsDisplayed()
@@ -178,11 +190,14 @@ class NoteListActionsTest {
             assertEquals(LibraryTarget("b", "content://test/b"), files.created.single().first)
             assertEquals(true, opened?.second)
         }
+        compose.onNodeWithText("记录到：生活库").performClick()
+        compose.onNodeWithText("工作库").performClick()
+        waitForText("记录到：工作库")
         compose.onNode(hasSetTextAction()).performTextInput("顺手记录新的想法")
         compose.onNodeWithContentDescription("发送").performClick()
         compose.waitUntil(5_000) { files.created.size == 2 }
         compose.runOnIdle {
-            assertEquals("b", files.created.last().first.libraryId)
+            assertEquals("a", files.created.last().first.libraryId)
             assertEquals("顺手记录新的想法", files.created.last().second)
         }
         selectedDay?.let { compose.onNodeWithText(it.toString()).assertIsDisplayed() }

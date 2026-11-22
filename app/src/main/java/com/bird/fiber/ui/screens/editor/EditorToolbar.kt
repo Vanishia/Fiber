@@ -2,7 +2,6 @@ package com.bird.fiber.ui.screens.editor
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -55,7 +54,6 @@ internal fun EditorToolbar(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             EditorToolbarButton(Icons.AutoMirrored.Filled.Undo, R.string.editor_toolbar_undo, enabled && canUndo, onUndo)

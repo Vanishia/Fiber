@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -108,7 +109,7 @@ fun SidebarContent(
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconToggleButton(checked = !uiState.showTags, onCheckedChange = { viewModel.selectTagView(false) }) {
@@ -177,7 +178,7 @@ fun SidebarContent(
         )
 
         // 全部笔记入口
-        AllNotesListItem(onClick = onAllNotesClick)
+        AllNotesListItem(onClick = onAllNotesClick, onStatisticsClick = onHeatmapClick)
 
         // 有新版本时显示更新提示块（跟随"显示更新通知"开关）
         updateInfo?.let { update ->
@@ -495,11 +496,11 @@ private fun LibraryListItem(
 }
 
 /**
- * "全部笔记"入口（样式与库条目一致，无更多菜单）
+ * "全部笔记"入口，右侧提供独立的统计入口。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AllNotesListItem(onClick: () -> Unit) {
+private fun AllNotesListItem(onClick: () -> Unit, onStatisticsClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -527,8 +528,17 @@ private fun AllNotesListItem(onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = onStatisticsClick, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.BarChart,
+                    contentDescription = "笔记统计",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

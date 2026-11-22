@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.bird.fiber.data.model.*
+import com.bird.fiber.data.local.library.NoteTagLabel
 import com.bird.fiber.data.repository.AttachmentRepository
 import com.bird.fiber.domain.markdown.DocumentSnapshot
 import com.bird.fiber.domain.usecase.RenderMarkdownUseCase
@@ -192,6 +193,49 @@ class EditorRefactorInstrumentedTest {
         } finally {
             file.delete()
         }
+    }
+
+    @Test
+    fun tagFooterReusesMarkdownDividerWithoutLabelAndUpdatesWithThemeAndTags() {
+        val renderer = RenderMarkdownUseCase(context, Attachments())
+        val content = renderer.render("正文\n\n---\n\n结尾")
+        var noteTags by mutableStateOf(listOf(NoteTagLabel("项目/android", "项目/Android")))
+        var dark by mutableStateOf(false)
+        var selected = ""
+        compose.setContent {
+            FiberTheme(darkTheme = dark, dynamicColor = false) {
+                EditorPreviewPane(
+                    renderedMarkdown = content,
+                    isRendering = false,
+                    applyPreview = renderer::apply,
+                    noteTags = noteTags,
+                    onTagClick = { selected = it },
+                    topContentInset = 0.dp,
+                    bottomContentInset = 0.dp
+                )
+            }
+        }
+        val chipMatcher = androidx.test.espresso.matcher.ViewMatchers.withContentDescription("查看标签 项目/Android")
+        fun assertDivider() {
+            androidx.test.espresso.Espresso.onView(chipMatcher).check { view, error ->
+                if (error != null) throw error
+                val tagSection = view.parent.parent.parent.parent as android.widget.LinearLayout
+                val divider = tagSection.getChildAt(0) as TextView
+                val document = tagSection.parent as android.widget.LinearLayout
+                val body = document.getChildAt(0) as TextView
+                assertEquals(body.currentTextColor, divider.currentTextColor)
+                assertEquals(body.textSize, divider.textSize)
+                val spans = divider.text as Spanned
+                assertEquals(1, spans.getSpans(0, spans.length, io.noties.markwon.core.spans.ThematicBreakSpan::class.java).size)
+                assertEquals(1, (tagSection.getChildAt(1) as android.widget.LinearLayout).childCount)
+            }
+        }
+        assertDivider()
+        androidx.test.espresso.Espresso.onView(chipMatcher).perform(androidx.test.espresso.action.ViewActions.click())
+        compose.runOnIdle { assertEquals("项目/android", selected); dark = true }
+        assertDivider()
+        compose.runOnIdle { noteTags = emptyList() }
+        androidx.test.espresso.Espresso.onView(chipMatcher).check(androidx.test.espresso.assertion.ViewAssertions.doesNotExist())
     }
 
     @Test

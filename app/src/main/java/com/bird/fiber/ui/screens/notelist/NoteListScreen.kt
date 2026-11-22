@@ -70,19 +70,6 @@ fun NoteListRouteScreen(
 ) {
     val date by viewModel.date.collectAsStateWithLifecycle()
 
-    if (date != null) {
-        NoteListWithActions(
-            viewModel = viewModel,
-            onMenuClick = {},
-            onSearchClick = { onSearchClick(date) },
-            onFileClick = onFileClick,
-            onAddLibrary = onAddLibrary,
-            date = date,
-            onBackClick = onBackClick
-        )
-        return
-    }
-
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val activeLibraryId by viewModel.activeLibraryId.collectAsStateWithLifecycle()
@@ -140,7 +127,9 @@ fun NoteListRouteScreen(
             onMenuClick = { scope.launch { drawerState.open() } },
             onSearchClick = { onSearchClick(date) },
             onFileClick = onFileClick,
-            onAddLibrary = onAddLibrary
+            onAddLibrary = onAddLibrary,
+            date = date,
+            onBackClick = onBackClick
         )
     }
 }

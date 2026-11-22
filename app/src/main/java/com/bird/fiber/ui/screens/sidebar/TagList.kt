@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bird.fiber.data.local.TagNode
@@ -37,27 +39,76 @@ internal fun TagList(
         }
         append(tags, 0)
     }
-    LazyColumn(modifier.fillMaxWidth()) {
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
         if (organizing) item { Text("标签数据仍在整理，结果将陆续更新", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall) }
         if (tags.isEmpty() && !organizing) item {
             Text("在笔记正文中输入 #标签 整理笔记，也可点击上方加号添加标签。", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
         }
         items(rows, key = { it.first.path }) { (node, depth) ->
-            Row(Modifier.fillMaxWidth().padding(start = (8 + depth * 12).dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (node.children.isNotEmpty()) {
-                    IconButton(onClick = {
-                        expanded = if (node.path in expanded) expanded - node.path else expanded + node.path
-                    }, modifier = Modifier.size(32.dp)) {
-                        Icon(if (node.path in expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
-                            if (node.path in expanded) "折叠 ${node.displayPath}" else "展开 ${node.displayPath}")
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = (12 + depth * 12).dp, end = 12.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Transparent
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onTagClick(node.path) }
+                            .heightIn(min = 52.dp)
+                            .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = node.displayPath.substringAfterLast('/'),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = node.noteCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
                     }
-                } else Spacer(Modifier.width(32.dp))
-                Row(Modifier.weight(1f).clickable { onTagClick(node.path) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(node.displayPath.substringAfterLast('/'), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(node.noteCount.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (node.canDelete) IconButton(onClick = { onDelete(node.path) }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.DeleteOutline, "删除空标签 ${node.displayPath}", modifier = Modifier.size(18.dp))
+                    if (node.children.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                expanded = if (node.path in expanded) expanded - node.path else expanded + node.path
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (node.path in expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+                                contentDescription = if (node.path in expanded) "折叠 ${node.displayPath}" else "展开 ${node.displayPath}",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (node.canDelete) {
+                        IconButton(onClick = { onDelete(node.path) }, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "删除空标签 ${node.displayPath}",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
                 }
             }
         }

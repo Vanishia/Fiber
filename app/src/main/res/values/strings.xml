@@ -1,6 +1,5 @@
 <resources>
     <string name="editor_toolbar_tag">标签</string>
-    <string name="editor_preview_tags">标签</string>
     <string name="editor_preview_tag_chip">#%1$s</string>
     <string name="editor_preview_open_tag">查看标签 %1$s</string>
     <string name="app_name">fiber</string>
