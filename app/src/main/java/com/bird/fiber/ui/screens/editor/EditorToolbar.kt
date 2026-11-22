@@ -2,11 +2,13 @@ package com.bird.fiber.ui.screens.editor
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -14,10 +16,9 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Title
-import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +30,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,12 +50,19 @@ internal fun EditorToolbar(
     onImage: () -> Unit
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).horizontalScroll(rememberScrollState())) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             EditorToolbarButton(Icons.AutoMirrored.Filled.Undo, R.string.editor_toolbar_undo, enabled && canUndo, onUndo)
             EditorToolbarButton(Icons.AutoMirrored.Filled.Redo, R.string.editor_toolbar_redo, enabled && canRedo, onRedo)
             listOf(
                 Triple(Icons.Default.Title, R.string.editor_toolbar_heading, EditorFormat.Heading),
-                Triple(Icons.Default.Tag, R.string.editor_toolbar_tag, EditorFormat.Tag),
+                Triple(Icons.Rounded.Numbers, R.string.editor_toolbar_tag, EditorFormat.Tag),
                 Triple(Icons.Default.FormatBold, R.string.editor_toolbar_bold, EditorFormat.Bold),
                 Triple(Icons.AutoMirrored.Filled.FormatListBulleted, R.string.editor_toolbar_bullet_list, EditorFormat.BulletList),
                 Triple(Icons.Default.CheckBox, R.string.editor_toolbar_task_list, EditorFormat.TaskList),

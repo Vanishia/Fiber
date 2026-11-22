@@ -11,15 +11,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,15 +106,21 @@ fun SidebarContent(
     ) {
         SidebarHeader(onSettingsClick = onSettingsClick)
 
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             IconToggleButton(checked = !uiState.showTags, onCheckedChange = { viewModel.selectTagView(false) }) {
                 Icon(Icons.Default.Folder, "笔记库", tint = if (!uiState.showTags) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconToggleButton(checked = uiState.showTags, onCheckedChange = { viewModel.selectTagView(true) }) {
-                Icon(Icons.Default.Tag, "标签", tint = if (uiState.showTags) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Numbers, "标签", tint = if (uiState.showTags) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box {
-                IconButton(onClick = { showAddMenu = true }) { Icon(Icons.Default.Add, "添加") }
+                IconButton(onClick = { showAddMenu = true }) {
+                    Icon(Icons.Rounded.Add, contentDescription = "添加", modifier = Modifier.size(20.dp))
+                }
                 DropdownMenu(
                     expanded = showAddMenu,
                     onDismissRequest = { showAddMenu = false }
@@ -129,7 +135,7 @@ fun SidebarContent(
                     )
                     DropdownMenuItem(
                         text = { Text("添加标签") },
-                        leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.Rounded.Numbers, contentDescription = null) },
                         onClick = {
                             showAddMenu = false
                             showAddTag = true
