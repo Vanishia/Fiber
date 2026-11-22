@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,6 +52,7 @@ import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -587,106 +590,94 @@ private fun colorFromWheel(position: Offset, size: IntSize, brightness: Float): 
     return AndroidColor.HSVToColor(floatArrayOf(hue, saturation, brightness))
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FontSizeSettingItem(
+internal fun FontSizeSettingItem(
     currentLevel: Int,
     onLevelChange: (Int) -> Unit
 ) {
     val levels = SettingsUiState.FONT_SIZE_PERCENTAGES
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "字体大小",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${levels[currentLevel.coerceIn(levels.indices)]}%",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            levels.forEachIndexed { index, percent ->
-                SegmentedButton(
-                    selected = index == currentLevel,
-                    onClick = { onLevelChange(index) },
-                    shape = SegmentedButtonDefaults.itemShape(index, levels.size),
-                    label = {
-                        Text(
-                            text = percent.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1
-                        )
-                    }
-                )
-            }
-        }
-    }
+    val level = currentLevel.coerceIn(levels.indices)
+    TypographySliderSettingItem(
+        title = "字体大小",
+        valueText = "${levels[level]}%",
+        value = level.toFloat(),
+        valueRange = 0f..levels.lastIndex.toFloat(),
+        steps = levels.size - 2,
+        onValueChange = { onLevelChange(it.roundToInt()) }
+    )
 }
 
 /**
  * 在编辑器与主页条目各自的预设行距基础上缩放，范围为 90%-130%。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LineHeightSettingItem(
+internal fun LineHeightSettingItem(
     currentPercent: Int,
     onPercentChange: (Int) -> Unit
 ) {
-    val percentages = (SettingsUiState.LINE_HEIGHT_MIN_PERCENT..
-        SettingsUiState.LINE_HEIGHT_MAX_PERCENT step SettingsUiState.LINE_HEIGHT_STEP_PERCENT).toList()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "正文行距",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "$currentPercent%",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            percentages.forEachIndexed { index, percent ->
-                SegmentedButton(
-                    selected = percent == currentPercent,
-                    onClick = { onPercentChange(percent) },
-                    shape = SegmentedButtonDefaults.itemShape(index, percentages.size),
-                    label = {
-                        Text(
-                            text = percent.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1
-                        )
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
+    val minimum = SettingsUiState.LINE_HEIGHT_MIN_PERCENT
+    val maximum = SettingsUiState.LINE_HEIGHT_MAX_PERCENT
+    val step = SettingsUiState.LINE_HEIGHT_STEP_PERCENT
+    Column {
+        TypographySliderSettingItem(
+            title = "正文行距",
+            valueText = "$currentPercent%",
+            value = currentPercent.coerceIn(minimum, maximum).toFloat(),
+            valueRange = minimum.toFloat()..maximum.toFloat(),
+            steps = (maximum - minimum) / step - 1,
+            onValueChange = { onPercentChange((it / step).roundToInt() * step) }
+        )
         Text(
             text = "影响编辑器和主页条目，不影响瀑布流卡片",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun TypographySliderSettingItem(
+    title: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.widthIn(min = 80.dp)
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            modifier = Modifier
+                .weight(1f)
+                .semantics {
+                    contentDescription = title
+                    stateDescription = valueText
+                }
+        )
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            modifier = Modifier.widthIn(min = 48.dp)
         )
     }
 }

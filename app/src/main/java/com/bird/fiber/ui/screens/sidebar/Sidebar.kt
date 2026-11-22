@@ -3,7 +3,12 @@ package com.bird.fiber.ui.screens.sidebar
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +30,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -32,11 +38,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.ui.screens.sidebar.heatmap.NoteHeatmapSection
+import com.bird.fiber.ui.screens.sidebar.heatmap.HeatmapViewModel
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -92,9 +101,11 @@ fun SidebarContent(
     onHeatmapDayClick: (LocalDate) -> Unit = {},
     onAllNotesClick: () -> Unit = {},
     onTagClick: (String) -> Unit = {},
-    viewModel: SidebarViewModel = hiltViewModel()
+    viewModel: SidebarViewModel = hiltViewModel(),
+    heatmapViewModel: HeatmapViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val heatmapState by heatmapViewModel.uiState.collectAsStateWithLifecycle()
     val updateInfo by viewModel.updateInfo.collectAsState()
     var updateDialogInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var showAddMenu by remember { mutableStateOf(false) }
@@ -105,7 +116,14 @@ fun SidebarContent(
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        SidebarHeader(onSettingsClick = onSettingsClick)
+        SidebarHeader(
+            onSettingsClick = onSettingsClick,
+            easterEggMessages = if (heatmapState.isLoaded) listOf(
+                "思想的原材料",
+                "已经记录了${heatmapState.recordedDays}天",
+                "今天写下${heatmapState.todayChars}字"
+            ) else listOf("思想的原材料")
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -174,7 +192,8 @@ fun SidebarContent(
         // 记录热力图
         NoteHeatmapSection(
             onDayClick = onHeatmapDayClick,
-            onClick = onHeatmapClick
+            onClick = onHeatmapClick,
+            viewModel = heatmapViewModel
         )
 
         // 全部笔记入口
@@ -343,21 +362,61 @@ internal fun UpdateDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SidebarHeader(onSettingsClick: () -> Unit) {
+internal fun SidebarHeader(
+    onSettingsClick: () -> Unit,
+    easterEggMessages: List<String> = listOf("思想的原材料")
+) {
+    var revealCount by remember { mutableIntStateOf(0) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val opacity = remember { Animatable(0f) }
+
+    LaunchedEffect(revealCount) {
+        if (revealCount == 0) return@LaunchedEffect
+        message = easterEggMessages.randomOrNull() ?: "思想的原材料"
+        opacity.snapTo(0f)
+        opacity.animateTo(1f, tween(200))
+        delay(2500)
+        opacity.animateTo(0f, tween(300))
+        message = null
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .padding(start = 16.dp, end = 8.dp),
+            .padding(start = 26.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "Fiber",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
+            maxLines = 1,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                    onDoubleClick = { revealCount++ }
+                )
         )
+
+        Box(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
+            message?.let { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.alpha(opacity.value)
+                )
+            }
+        }
 
         IconButton(
             onClick = onSettingsClick,
