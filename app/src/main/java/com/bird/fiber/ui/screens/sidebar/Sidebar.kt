@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,11 +33,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.bird.fiber.R
 import com.bird.fiber.data.local.library.LibraryEntity
 import com.bird.fiber.data.update.AppUpdateInfo
 import com.bird.fiber.ui.screens.sidebar.heatmap.NoteHeatmapSection
@@ -389,31 +390,37 @@ internal fun SidebarHeader(
             .padding(start = 26.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Fiber",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+        Box(
             modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp)
                 .heightIn(min = 48.dp)
-                .wrapContentHeight(Alignment.CenterVertically)
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {},
                     onDoubleClick = { revealCount++ }
-                )
-        )
-
-        Box(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
-            message?.let { text ->
+                ),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    text = "Fiber",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    modifier = Modifier.alignByBaseline()
+                )
+                Text(
+                    text = message.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall.copy(letterSpacing = 0.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.alpha(opacity.value)
+                    modifier = Modifier.weight(1f).alignByBaseline().alpha(opacity.value)
                 )
             }
         }
@@ -592,10 +599,10 @@ private fun AllNotesListItem(onClick: () -> Unit, onStatisticsClick: () -> Unit)
             )
             IconButton(onClick = onStatisticsClick, modifier = Modifier.size(40.dp)) {
                 Icon(
-                    imageVector = Icons.Rounded.BarChart,
+                    painter = painterResource(R.drawable.ic_statistics),
                     contentDescription = "笔记统计",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }

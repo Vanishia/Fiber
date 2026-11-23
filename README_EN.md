@@ -19,6 +19,7 @@ Fiber is a lightweight Markdown note-taking app focused on the **quick capture**
 
 - ✍️ **Quick Capture**: a bottom input box — open the app and start writing, save with one tap
 - 📁 **Multiple Libraries**: manage multiple folders as separate note libraries
+- 🏷️ **Tags**: recognize `#tags` and nested paths such as `#reading/psychology` in note content; browse tags across libraries in the sidebar and tap a parent tag to view notes throughout its branch
 - 🔍 **Full-Text Search**: matches titles, content, and paths, across libraries if you like, with hit snippets and keyword highlighting
 - 🔥 **Activity Heatmap**: a heatmap in the sidebar plus a full-year heatmap page, filterable by month/year; tap a cell to view that day's notes
 - 🎲 **Random Walk**: randomly revisit a note from the current library or all libraries, read in a full-text dialog
@@ -97,7 +98,8 @@ app/src/main/java/com/bird/fiber/
     │   ├── heatmap/             # Activity heatmap page (month/year filters)
     │   ├── importing/           # External share & file import
     │   ├── notelist/            # All notes / today's notes browsing
-    │   ├── sidebar/             # Sidebar (library management, heatmap)
+    │   ├── sidebar/             # Sidebar (libraries, tag tree, heatmap)
+    │   ├── tags/                # Cross-library tagged note lists
     │   ├── search/              # Full-text search, scope and sorting
     │   ├── settings/            # Settings (font, theme, colors)
     │   └── quicknote/           # Quick note (bottom input box)
@@ -210,6 +212,15 @@ On the search page, tap "Random Walk" to draw a random note to revisit
 - In Settings, choose follow-system, light, or dark mode
 - On Android 12+, enable system dynamic color, or customize the theme color with the color wheel
 - Font size settings apply to the entire interface
+
+### 10. Organize Notes with Tags
+
+- Type a half-width `#` immediately followed by a tag name in your note, such as `#ideas`; do not add a space after `#`
+- Use `/` for nested tags, such as `#reading/psychology`; the tag button in the editor toolbar inserts `#` at the cursor
+- Tap the `#` icon at the top of the sidebar to browse tags and note counts from all libraries; tap a tag to view its notes
+- A parent tag includes notes from all its descendants, counting each note once; switching the current library does not change the tag scope
+- Tap the sidebar's plus button and choose "Add Tag" to create an empty tag in advance; manually created tags with no associated notes can be deleted without changing Markdown files
+- The tag index updates automatically after saving notes or syncing external changes; the app remains usable while existing notes are indexed for the first time
 
 ---
 

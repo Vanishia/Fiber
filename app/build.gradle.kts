@@ -28,6 +28,9 @@ android {
         versionCode = 10
         versionName = "1.3.0"
 
+        // The app's own UI is Chinese; retain English for library fallbacks.
+        resourceConfigurations += listOf("zh", "zh-rCN", "zh-rTW", "zh-rHK", "en", "en-rGB")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
